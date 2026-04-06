@@ -3,6 +3,9 @@ build/
 build-ninja/
 cmake-build-debug/
 install/
+.claude/
+local_cuda/
+local_cuda_pkgs/
 src/projects/*
 cmake-gui.exe.stackdump
 __pycache__/

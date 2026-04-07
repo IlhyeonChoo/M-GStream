@@ -7,6 +7,7 @@
 #include <core/system/Vector.hpp>
 
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -28,6 +29,7 @@ namespace sibr {
 		size_t max_cpu_evictions_per_frame = 1;
 		int max_concurrent_disk_loads = 1;
 		double default_unload_hysteresis_sec = 1.0;
+		bool warm_rule_assets_cpu = false;
 	};
 
 	struct AssetDescriptor {
@@ -69,6 +71,7 @@ namespace sibr {
 		const ManifestGlobalSettings& settings() const;
 		const std::unordered_map<AssetId, AssetDescriptor>& assets() const;
 		const std::vector<ManifestRule>& rules() const;
+		const std::unordered_set<AssetId>& referencedAssets() const;
 		std::vector<PhaseId> phases() const;
 
 	private:
@@ -76,5 +79,6 @@ namespace sibr {
 		ManifestGlobalSettings settings_;
 		std::unordered_map<AssetId, AssetDescriptor> assets_;
 		std::vector<ManifestRule> rules_;
+		std::unordered_set<AssetId> referencedAssets_;
 	};
 }

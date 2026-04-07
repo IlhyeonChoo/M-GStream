@@ -55,6 +55,9 @@ namespace sibr {
 	PolicyResult SwapPolicy::evaluate(const ViewerContext& context, const ManifestStore& manifest, const ResourceManager& registry) const
 	{
 		PolicyResult result;
+		// registry is accepted for API symmetry with future policy types (e.g. LRU,
+		// usage-frequency) that will need asset metadata. Current rule-based evaluation
+		// reads only manifest data and ViewerContext.
 		(void)registry;
 
 		if (manifest.empty()) {
@@ -71,6 +74,10 @@ namespace sibr {
 				result.warm_cpu.insert(assetPair.first);
 				result.protected_assets.insert(assetPair.first);
 			}
+		}
+
+		if (manifest.settings().warm_rule_assets_cpu) {
+			result.warm_cpu.insert(manifest.referencedAssets().begin(), manifest.referencedAssets().end());
 		}
 
 		for (const auto& rule : manifest.rules()) {
@@ -106,8 +113,8 @@ namespace sibr {
 				for (const auto& assetPair : manifest.assets()) {
 					const auto& assetId = assetPair.first;
 					const auto& descriptor = assetPair.second;
-					const bool isRequiredCandidate = requiredCandidates.empty() ? false : requiredCandidates.count(assetId) > 0;
-					const bool isWarmCandidate = warmCandidates.empty() ? false : warmCandidates.count(assetId) > 0;
+					const bool isRequiredCandidate = requiredCandidates.count(assetId) > 0;
+					const bool isWarmCandidate = warmCandidates.count(assetId) > 0;
 					if (!isRequiredCandidate && !isWarmCandidate) {
 						continue;
 					}

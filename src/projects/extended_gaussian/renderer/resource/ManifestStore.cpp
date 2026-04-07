@@ -4,6 +4,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -63,6 +64,10 @@ namespace {
 			}
 		}
 		return values;
+	}
+
+	bool containsTag(const std::vector<std::string>& tags, const std::string& tag) {
+		return std::find(tags.begin(), tags.end(), tag) != tags.end();
 	}
 
 	sibr::Vector3f parseVector3(const picojson::object& object, const std::string& key, const sibr::Vector3f& defaultValue) {
@@ -136,6 +141,7 @@ namespace sibr {
 			settings_.max_cpu_evictions_per_frame = parseSize(global, "max_cpu_evictions_per_frame", settings_.max_cpu_evictions_per_frame);
 			settings_.max_concurrent_disk_loads = std::max(1, parseInt(global, "max_concurrent_disk_loads", settings_.max_concurrent_disk_loads));
 			settings_.default_unload_hysteresis_sec = parseDouble(global, "default_unload_hysteresis_sec", settings_.default_unload_hysteresis_sec);
+			settings_.warm_rule_assets_cpu = parseBool(global, "warm_rule_assets_cpu", settings_.warm_rule_assets_cpu);
 		}
 
 		const auto assetsIt = root.find("assets");
@@ -216,6 +222,27 @@ namespace sibr {
 			}
 		}
 
+		for (const auto& rule : rules_) {
+			referencedAssets_.insert(rule.required.begin(), rule.required.end());
+			referencedAssets_.insert(rule.warm.begin(), rule.warm.end());
+
+			for (const auto& tag : rule.required_by_tag) {
+				for (const auto& assetPair : assets_) {
+					if (containsTag(assetPair.second.tags, tag)) {
+						referencedAssets_.insert(assetPair.first);
+					}
+				}
+			}
+
+			for (const auto& tag : rule.warm_by_tag) {
+				for (const auto& assetPair : assets_) {
+					if (containsTag(assetPair.second.tags, tag)) {
+						referencedAssets_.insert(assetPair.first);
+					}
+				}
+			}
+		}
+
 		manifestPath_ = boost::filesystem::absolute(manifestPath);
 		SIBR_LOG << "Loaded manifest '" << manifestPath_.string() << "' with " << assets_.size()
 			<< " asset(s) and " << rules_.size() << " rule(s)." << std::endl;
@@ -228,6 +255,7 @@ namespace sibr {
 		settings_ = ManifestGlobalSettings();
 		assets_.clear();
 		rules_.clear();
+		referencedAssets_.clear();
 	}
 
 	bool ManifestStore::empty() const
@@ -253,6 +281,11 @@ namespace sibr {
 	const std::vector<ManifestRule>& ManifestStore::rules() const
 	{
 		return rules_;
+	}
+
+	const std::unordered_set<AssetId>& ManifestStore::referencedAssets() const
+	{
+		return referencedAssets_;
 	}
 
 	std::vector<PhaseId> ManifestStore::phases() const

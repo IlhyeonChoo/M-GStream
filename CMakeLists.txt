@@ -52,7 +52,7 @@ if (WIN32)
 	get_filename_component(currentBuildTool ${CMAKE_BUILD_TOOL} NAME_WE)	# tool that can launch the native build system. returned value may be the full path
 	if(${currentBuildTool} MATCHES "(msdev|devenv|nmake|MSBuild)")
 
-		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/W3;/DNOMINMAX;/MP;-D_USE_MATH_DEFINES>")
+		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/W3;/DNOMINMAX;/MP;-D_USE_MATH_DEFINES;/utf-8>")
 	    #add_definitions(/W3 /DNOMINMAX /MP -D_USE_MATH_DEFINES)# /D_ITERATOR_DEBUG_LEVEL=1 because you need all external DLl to compile with this flag too
 	    set(CMAKE_CONFIGURATION_TYPES "RelWithDebInfo;Release;Debug" CACHE STRING "" FORCE)
 	    set(CMAKE_CXX_STANDARD 14)
@@ -78,7 +78,7 @@ else()
 	get_filename_component(currentBuildTool ${CMAKE_BUILD_TOOL} NAME_WE)	# tool that can launch the native build system. returned value may be the full path
 	if(${currentBuildTool} MATCHES "(msdev|devenv|nmake|MSBuild)")
 
-		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/W3;/DNOMINMAX;/MP;-D_USE_MATH_DEFINES>")
+		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/W3;/DNOMINMAX;/MP;-D_USE_MATH_DEFINES;/utf-8>")
 	    #add_definitions(/W3 /DNOMINMAX /MP -D_USE_MATH_DEFINES)# /D_ITERATOR_DEBUG_LEVEL=1 because you need all external DLl to compile with this flag too
 	    set(CMAKE_CONFIGURATION_TYPES "RelWithDebInfo;Release;Debug" CACHE STRING "" FORCE)
 	    set(CMAKE_CXX_STANDARD 14)

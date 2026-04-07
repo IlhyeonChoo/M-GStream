@@ -5,19 +5,20 @@
 
 ## 1. 목적
 
-이 문서는 `extended_gaussian`를 **다른 Windows 10/11 PC에서도 비교적 쉽게 실행**하기 위한 기준 절차를 정리한다.
+이 문서는 `extended_gaussian`를 **다른 Windows 10/11 PC에서도 비교적 바로 실행**하기 위한 기준 절차를 정리한다.
 
 이번 가이드는 다음을 목표로 한다.
 
 - 새 Windows PC에서 source build / install / run
 - 현재 머신에서 만들어 둔 `install/` 결과를 다른 PC로 전달하는 설치 번들 생성
-- manifest는 유지하되, 저장소에 없는 데이터셋은 사용자 제공 데이터로 연결
+- GPU가 장착된 다른 Windows PC에서 CUDA Toolkit 없이도 번들만으로 실행 가능하도록 필요한 런타임 포함
+- manifest는 유지하되, 저장소에 없는 데이터셋은 사용자 제공 데이터 또는 번들 포함 데이터로 연결
 
 이번 범위에 포함되지 않는 것은 다음과 같다.
 
 - 인스톨러 제작
-- 예제 데이터 포함 배포
 - OOM 수정
+- Ubuntu 관련 변경
 
 ## 2. 권장 환경
 
@@ -36,6 +37,8 @@
 - `Debug`는 의존 DLL과 CRT 제약이 더 크다.
 - `Release`보다 디버깅 정보가 남아 문제 추적이 쉽다.
 - 현재 로컬 검증과 번들 기준도 `*_rwdi.exe` 중심이다.
+
+권장 실행 파일도 `extended_gaussianViewer_app_rwdi.exe` 기준이다.
 
 ## 3. 새 Windows PC에서 직접 빌드하는 방법
 
@@ -76,7 +79,36 @@ manifest를 같이 쓰려면:
 tools\windows\run_installed_viewer.cmd --manifest ".\manifests\mc_small_aerial_c36_neighbors_3x3.json"
 ```
 
-## 4. 설치 번들 생성
+`run_installed_viewer.cmd`는 인자 없이 실행해도, 아래 둘이 동시에 존재하면 sample manifest를 자동으로 붙인다.
+
+- `manifests\mc_small_aerial_c36_neighbors_3x3.json`
+- `swaptest\mc_small_aerial_c36`
+
+## 4. 원클릭 빌드 + 설치 + 번들 생성
+
+가장 쉬운 방법은 아래 스크립트 하나를 사용하는 것이다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_bundle.ps1 -ZipBundle
+```
+
+이 스크립트는 순서대로 아래를 수행한다.
+
+- `extended_gaussianViewer_app` 빌드
+- `extended_gaussianViewer_app_install` 실행
+- 설치 결과에 빠지기 쉬운 런타임(`cudart64_*.dll`, `xatlas*.dll`) 보강
+- Windows portable bundle 생성
+- 필요 시 zip 생성
+
+sample data까지 함께 묶어 바로 실행 가능한 번들을 만들고 싶으면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_bundle.ps1 -ZipBundle -IncludeSwaptestData
+```
+
+`-IncludeSwaptestData`는 로컬 `swaptest/`를 번들 안에 같이 복사한다.
+
+## 5. 설치 번들만 생성
 
 현재 머신에서 설치 결과를 다른 Windows PC로 전달하려면 아래 스크립트를 사용한다.
 
@@ -94,20 +126,33 @@ zip까지 같이 만들려면:
 powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portable_bundle.ps1 -ZipBundle
 ```
 
+sample data까지 같이 복사하려면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portable_bundle.ps1 -ZipBundle -IncludeSwaptestData
+```
+
 이 스크립트는 다음을 묶는다.
 
 - `install/`
 - `manifests/`
 - 이 문서 사본
+- runtime preflight 스크립트
 - 번들 루트 실행 스크립트
-- `swaptest/README.txt`
+- `swaptest/README.txt` 또는 실제 `swaptest/` 데이터
+
+또한 아래 런타임을 설치 결과에 보강한다.
+
+- CUDA runtime: `cudart64_*.dll`
+- xatlas runtime: `xatlas*.dll`
 
 `cmake --install` 이후에는 아래도 같이 설치된다.
 
 - `install/scripts/extended_gaussian/run_installed_viewer.cmd`
+- `install/scripts/extended_gaussian/check_windows_runtime.ps1`
 - `install/docs/extended_gaussian_windows_portable_bundle_ko.md`
 
-## 5. 번들 전달 후 다른 PC에서 실행하는 방법
+## 6. 번들 전달 후 다른 PC에서 실행하는 방법
 
 번들을 압축 해제한 뒤, 번들 루트에서 아래 스크립트를 실행한다.
 
@@ -121,7 +166,18 @@ manifest를 지정하려면:
 run_extended_gaussian_viewer.cmd --manifest ".\manifests\mc_small_aerial_c36_neighbors_3x3.json"
 ```
 
-## 6. 데이터 배치 규칙
+번들 루트에 아래 둘이 동시에 존재하면, 인자 없이 실행해도 sample manifest가 자동으로 붙는다.
+
+- `manifests\mc_small_aerial_c36_neighbors_3x3.json`
+- `swaptest\mc_small_aerial_c36`
+
+실행 전에 번들 상태를 확인하려면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\check_windows_runtime.ps1 -AppRoot ".\install"
+```
+
+## 7. 데이터 배치 규칙
 
 저장소에는 `swaptest/` 데이터가 포함되어 있지 않다.  
 즉, manifest만 복사해도 바로 렌더링되지는 않는다.
@@ -144,7 +200,20 @@ extended_gaussian-windows-portable/
 
 데이터를 다른 위치에 둘 경우에는 manifest의 `model_dir`를 직접 수정해야 한다.
 
-## 7. baseline known issue
+## 8. 다른 Windows PC에서 바로 실행되기 위한 조건
+
+이 번들은 아래 조건이 충족되면, CUDA Toolkit이 설치되지 않은 다른 Windows PC에서도 바로 실행하는 것을 목표로 한다.
+
+- Windows 10/11 x64
+- NVIDIA GPU
+- NVIDIA 드라이버 설치 완료
+- 번들에 포함된 `install/`, `manifests/`, 필요한 경우 `swaptest/` 유지
+
+즉 **필수 조건은 NVIDIA 드라이버와 실제 GPU**이고, CUDA Toolkit 자체는 번들 사용 조건이 아니다.
+
+다만 sample manifest로 실제 렌더링까지 보려면 해당 데이터가 번들에 있거나, 사용자가 `swaptest/`에 넣어야 한다.
+
+## 9. baseline known issue
 
 현재 baseline known issue는 다음과 같다.
 
@@ -160,15 +229,16 @@ extended_gaussian-windows-portable/
 이번 Windows portability 작업은 이 이슈를 수정하지 않는다.  
 대신 다른 Windows PC에서도 동일 증상이 재현되는지 확인 항목으로 유지한다.
 
-## 8. 권장 검증 순서
+## 10. 권장 검증 순서
 
 다른 Windows PC에서 최소한 아래 순서까지 확인하는 것을 권장한다.
 
-1. `run_extended_gaussian_viewer.cmd` 실행
-2. manifest 없이 UI 진입 확인
-3. manifest 포함 실행
-4. `Resource Browser`에 asset이 나타나는지 확인
-5. `Scene Outliner`에서 manifest instance가 생성되는지 확인
-6. `Current Phase` 변경 시 residency 통계가 변하는지 확인
+1. `check_windows_runtime.ps1` 실행
+2. `run_extended_gaussian_viewer.cmd` 실행
+3. manifest 없이 UI 진입 확인
+4. manifest 포함 실행
+5. `Resource Browser`에 asset이 나타나는지 확인
+6. `Scene Outliner`에서 manifest instance가 생성되는지 확인
+7. `Current Phase` 변경 시 residency 통계가 변하는지 확인
 
 실제 렌더링까지 보려면 사용자 제공 데이터가 올바른 위치에 있어야 한다.

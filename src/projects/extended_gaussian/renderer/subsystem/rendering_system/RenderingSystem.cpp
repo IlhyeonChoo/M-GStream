@@ -1,7 +1,6 @@
 #include "RenderingSystem.hpp"
 
 #include "RenderUtils.hpp"
-#include "RenderingSystem.hpp"
 #include <projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp>
 
 namespace sibr {

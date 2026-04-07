@@ -19,18 +19,21 @@ namespace sibr {
 		Failed
 	};
 
+	// Internal per-asset bookkeeping. All fields are protected by ResourceManager::mutex_.
+	// Lifetime note: cpu_field is a shared_ptr. Callers that obtain a copy via
+	// getCpuFieldShared() keep the field alive even after the record transitions
+	// to EvictQueued or Unloaded - the underlying GaussianField is destroyed when
+	// the last shared_ptr drops, not when evictCpuNow() runs.
 	struct AssetRecord {
 		AssetDescriptor desc;
 		CpuState cpu_state = CpuState::Unloaded;
 		GaussianField::Ptr cpu_field;
-		// Callers that hold a copy from getCpuFieldShared() keep the payload alive
-		// until the last shared_ptr is released, even if the record transitions.
 		// Frame indices set by markRequested/markVisible; used by eviction policy.
 		uint64_t last_requested_frame = 0;
 		uint64_t last_visible_frame = 0;
-		bool desired_cpu = false;
-		bool pinned_cpu = false;
-		size_t actual_cpu_bytes = 0;
+		bool desired_cpu = false;   // Set by SwapManager each tick.
+		bool pinned_cpu = false;    // True if manifest pin_cpu OR user pin is active.
+		size_t actual_cpu_bytes = 0; // Measured on load; used for totalCpuBytes_ accounting.
 	};
 
 	// Thread-safe snapshot of an AssetRecord for external consumers.

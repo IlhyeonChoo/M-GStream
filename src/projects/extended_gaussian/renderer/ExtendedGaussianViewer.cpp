@@ -3,6 +3,12 @@
 #include <projects/extended_gaussian/renderer/resource/GaussianLoader.hpp>
 #include <projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.hpp>
 
+#include <core/system/CommandLineArgs.hpp>
+
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+
 namespace sibr {
 	ExtendedGaussianViewer::ExtendedGaussianViewer(Window& window, bool resize)
 		: _window(window), _fpsCounter(false)
@@ -33,11 +39,17 @@ namespace sibr {
 		_resourceManager = std::make_unique<ResourceManager>();
 		_subsystem[RENDERING_SYSTEM] = std::make_unique<RenderingSystem>();
 		_subsystem[RENDERING_SYSTEM]->onSystemAdded(*this);
+
+		const std::string manifestPath = getCommandLineArgs().get<std::string>("manifest", "");
+		if (!manifestPath.empty()) {
+			loadManifestFile(manifestPath);
+		}
 	}
 
 	void ExtendedGaussianViewer::onUpdate(Input& input)
 	{
 		MultiViewBase::onUpdate(input);
+		_appTimeSec += deltaTime();
 
 		if (input.key().isActivated(Key::LeftControl) && input.key().isActivated(Key::LeftAlt) && input.key().isReleased(Key::G)) {
 			toggleGUI();
@@ -53,7 +65,24 @@ namespace sibr {
 
 		onGui(win);
 
+		RenderingSystem* renderingSystem = getRenderingSystem();
+		if (renderingSystem) {
+			ViewerContext context;
+			const auto viewIt = _ibrSubViews.find("Gaussian View");
+			if (viewIt != _ibrSubViews.end()) {
+				context.camera_pos = viewIt->second.cam.position();
+				context.camera_forward = viewIt->second.cam.dir();
+				context.camera_up = viewIt->second.cam.up();
+			}
+			context.current_phase = _currentPhase;
+			context.app_time_sec = _appTimeSec;
+			context.dt_sec = deltaTime();
+			context.frame_index = _frameIndex;
+			renderingSystem->tickStreaming(context);
+		}
+
 		MultiViewBase::onRender(win);
+		++_frameIndex;
 
 		_fpsCounter.update(_enableGUI && _showGUI);
 	}
@@ -252,8 +281,188 @@ namespace sibr {
 		return _scene.get();
 	}
 
+	GaussianScene* ExtendedGaussianViewer::getScene() {
+		return _scene.get();
+	}
+
+	ResourceManager* ExtendedGaussianViewer::getResourceManager() {
+		return _resourceManager.get();
+	}
+
 	const ResourceManager* ExtendedGaussianViewer::getResourceManager() const {
 		return _resourceManager.get();
+	}
+
+	RenderingSystem* ExtendedGaussianViewer::getRenderingSystem()
+	{
+		return static_cast<RenderingSystem*>(_subsystem[RENDERING_SYSTEM].get());
+	}
+
+	const RenderingSystem* ExtendedGaussianViewer::getRenderingSystem() const
+	{
+		return static_cast<const RenderingSystem*>(_subsystem[RENDERING_SYSTEM].get());
+	}
+
+	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path)
+	{
+		if (!_manifestStore.load(path)) {
+			return false;
+		}
+
+		_loadedManifestPath = _manifestStore.path().string();
+		_resourceManager->registerManifest(_manifestStore);
+		auto phases = _manifestStore.phases();
+		if (!phases.empty() && std::find(phases.begin(), phases.end(), _currentPhase) == phases.end()) {
+			_currentPhase = phases.front();
+		}
+
+		if (auto* renderingSystem = getRenderingSystem()) {
+			renderingSystem->setManifest(&_manifestStore);
+		}
+
+		if (_scene && _scene->getInstances().empty()) {
+			const size_t createdCount = createManifestInstances(true);
+			if (createdCount > 0) {
+				SIBR_LOG << "Created " << createdCount << " manifest instance(s)." << std::endl;
+			}
+		}
+
+		focusCameraOnManifest();
+		return true;
+	}
+
+	size_t ExtendedGaussianViewer::createManifestInstances(bool onlyMissing)
+	{
+		if (_manifestStore.empty() || !_scene) {
+			return 0;
+		}
+
+		std::vector<std::string> assetIds;
+		assetIds.reserve(_manifestStore.assets().size());
+		for (const auto& assetPair : _manifestStore.assets()) {
+			assetIds.push_back(assetPair.first);
+		}
+		std::sort(assetIds.begin(), assetIds.end());
+
+		size_t createdCount = 0;
+		for (const auto& assetId : assetIds) {
+			if (onlyMissing && _scene->countInstancesUsingAsset(assetId) > 0) {
+				continue;
+			}
+
+			std::string instanceName = assetId;
+			int suffix = 1;
+			while (_scene->getInstance(instanceName) != nullptr) {
+				const GaussianInstance* existingInstance = _scene->getInstance(instanceName);
+				if (existingInstance && existingInstance->getAssetId() == assetId) {
+					instanceName.clear();
+					break;
+				}
+				instanceName = assetId + "_" + std::to_string(suffix++);
+			}
+
+			if (instanceName.empty()) {
+				continue;
+			}
+
+			GaussianInstance* instance = _scene->createInstance(instanceName, assetId);
+			if (!instance) {
+				continue;
+			}
+
+			_selectedInstance = instance;
+			_subsystem[RENDERING_SYSTEM]->onInstaceCreated(*instance);
+			++createdCount;
+		}
+
+		return createdCount;
+	}
+
+	void ExtendedGaussianViewer::focusCameraOnManifest()
+	{
+		if (_manifestStore.empty()) {
+			return;
+		}
+
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			return;
+		}
+
+		auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler);
+		if (!handler) {
+			return;
+		}
+
+		bool hasBounds = false;
+		Vector3f minBounds = Vector3f::Zero();
+		Vector3f maxBounds = Vector3f::Zero();
+		for (const auto& assetPair : _manifestStore.assets()) {
+			const auto& descriptor = assetPair.second;
+			if (!hasBounds) {
+				minBounds = descriptor.bounds_min;
+				maxBounds = descriptor.bounds_max;
+				hasBounds = true;
+				continue;
+			}
+			minBounds = minBounds.cwiseMin(descriptor.bounds_min);
+			maxBounds = maxBounds.cwiseMax(descriptor.bounds_max);
+		}
+
+		if (!hasBounds) {
+			return;
+		}
+
+		const Vector3f center = 0.5f * (minBounds + maxBounds);
+		const Vector3f diagonal = maxBounds - minBounds;
+		const float maxExtent = std::max(1.0f, std::max(diagonal.x(), std::max(diagonal.y(), diagonal.z())));
+		const float zMargin = std::max(0.1f, 0.05f * diagonal.z());
+		const float preferredZOffset = std::max(1.0f, 0.25f * diagonal.z());
+		const float clampedZ = std::min(maxBounds.z() - zMargin, center.z() + preferredZOffset);
+		Vector3f eye = center;
+		eye.z() = std::max(minBounds.z() + zMargin, clampedZ);
+
+		// Keep the camera inside the manifest AABB so camera_bounds rules immediately activate.
+		const float xyInset = std::max(0.01f, 0.02f * maxExtent);
+		eye.x() = std::min(maxBounds.x() - xyInset, std::max(minBounds.x() + xyInset, eye.x()));
+		eye.y() = std::min(maxBounds.y() - xyInset, std::max(minBounds.y() + xyInset, eye.y()));
+
+		InputCamera focusCamera = viewIt->second.cam;
+		focusCamera.setLookAt(eye, center, Vector3f(0.0f, 1.0f, 0.0f));
+		focusCamera.znear(0.01f);
+		focusCamera.zfar(std::max(1000.0f, maxExtent * 20.0f));
+		handler->fromCamera(focusCamera, false, true);
+		viewIt->second.cam = focusCamera;
+	}
+
+	const char* ExtendedGaussianViewer::cpuStateLabel(CpuState state)
+	{
+		switch (state) {
+		case CpuState::Loading: return "Loading";
+		case CpuState::Resident: return "CPU";
+		case CpuState::Failed: return "Failed";
+		case CpuState::Unloaded:
+		default: return "Unloaded";
+		}
+	}
+
+	const char* ExtendedGaussianViewer::gpuStateLabel(GpuState state)
+	{
+		switch (state) {
+		case GpuState::UploadQueued: return "Uploading";
+		case GpuState::Resident: return "GPU";
+		case GpuState::EvictQueued: return "Evicting";
+		case GpuState::Failed: return "Failed";
+		case GpuState::Unloaded:
+		default: return "Unloaded";
+		}
+	}
+
+	std::string ExtendedGaussianViewer::formatMegabytes(size_t bytes)
+	{
+		std::ostringstream stream;
+		stream << std::fixed << std::setprecision(1) << (static_cast<double>(bytes) / (1024.0 * 1024.0));
+		return stream.str();
 	}
 
 	void ExtendedGaussianViewer::onShowScenePanel(Window& win) {
@@ -262,6 +471,31 @@ namespace sibr {
 		ImGui::SetNextWindowSize(ImVec2(sideWidth, win.size().y() - 20.0f), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin("Scene Outliner", &_showScenePanel, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)) {
+			char phaseBuffer[128] = {};
+			strcpy_s(phaseBuffer, sizeof(phaseBuffer), _currentPhase.c_str());
+			if (ImGui::InputText("Current Phase", phaseBuffer, IM_ARRAYSIZE(phaseBuffer))) {
+				_currentPhase = phaseBuffer;
+			}
+
+			size_t manifestInstanceCount = 0;
+			for (const auto& assetPair : _manifestStore.assets()) {
+				if (_scene->countInstancesUsingAsset(assetPair.first) > 0) {
+					++manifestInstanceCount;
+				}
+			}
+
+			if (!_manifestStore.empty()) {
+				ImGui::Text("Manifest Instances: %u / %u",
+					static_cast<unsigned>(manifestInstanceCount),
+					static_cast<unsigned>(_manifestStore.assets().size()));
+				if (ImGui::Button("Create Manifest Instances", ImVec2(-1, 25))) {
+					const size_t createdCount = createManifestInstances(true);
+					SIBR_LOG << "Created " << createdCount << " additional manifest instance(s)." << std::endl;
+				}
+				if (ImGui::Button("Focus Manifest Camera", ImVec2(-1, 25))) {
+					focusCameraOnManifest();
+				}
+			}
 
 			// Instance Creatttion Button
 			if (ImGui::Button("Create New Instance", ImVec2(-1, 25))) {
@@ -287,9 +521,9 @@ namespace sibr {
 						previewAssetId.clear();
 					}
 
-					for (auto& pair : _resourceManager->getFields()) {
-						if (ImGui::Selectable(pair.first.c_str(), pair.first == previewAssetId)) {
-							previewAssetId = pair.first;
+					for (const auto& assetId : _resourceManager->listAssetIds()) {
+						if (ImGui::Selectable(assetId.c_str(), assetId == previewAssetId)) {
+							previewAssetId = assetId;
 						}
 					}
 					ImGui::EndCombo();
@@ -382,10 +616,10 @@ namespace sibr {
 							_selectedInstance->setAssetId("");
 							_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
 						}
-						for (auto& pair : _resourceManager->getFields()) {
-							bool isSourceSelected = (pair.first == currentAssetId);
-							if (ImGui::Selectable(pair.first.c_str(), isSourceSelected)) {
-								_selectedInstance->setAssetId(pair.first);
+						for (const auto& assetId : _resourceManager->listAssetIds()) {
+							bool isSourceSelected = (assetId == currentAssetId);
+							if (ImGui::Selectable(assetId.c_str(), isSourceSelected)) {
+								_selectedInstance->setAssetId(assetId);
 								_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
 							}
 						}
@@ -428,13 +662,40 @@ namespace sibr {
 		ImGui::SetNextWindowSize(ImVec2(win.size().x() - sideWidth, browserHeight), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin("Resource Browser", &_showResourceBrowser, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)) {
-
+			if (ImGui::Button("Load Manifest", ImVec2(120, 30))) {
+				std::string manifestPath;
+				if (showFilePicker(manifestPath, FilePickerMode::Default, "", "json")) {
+					loadManifestFile(manifestPath);
+				}
+			}
+			ImGui::SameLine();
 			if (ImGui::Button("Import PLY", ImVec2(100, 30))) {
 				std::string path;
 				if (showFilePicker(path, FilePickerMode::Directory)) {
 					auto field = GaussianLoader::load(path);
-					if (field) _resourceManager->addField(std::move(field));
+					if (field) {
+						_resourceManager->addField(std::move(field));
+					}
 				}
+			}
+			ImGui::Separator();
+
+			ImGui::TextWrapped("Manifest: %s", _loadedManifestPath.empty() ? "(none)" : _loadedManifestPath.c_str());
+			ImGui::Text("CPU Resident: %s MB", formatMegabytes(_resourceManager->totalCpuBytes()).c_str());
+			ImGui::Text("GPU Resident: %s MB", formatMegabytes(GPUResourceManager::getInstance().totalBytes()).c_str());
+			const RenderingSystem* renderingSystem = getRenderingSystem();
+			const SwapManager::Stats* stats = renderingSystem ? renderingSystem->getSwapStats() : nullptr;
+			if (stats) {
+				ImGui::Text("Phase: %s", stats->current_phase.empty() ? "(none)" : stats->current_phase.c_str());
+				ImGui::Text("Required GPU: %u | Warm CPU: %u", static_cast<unsigned>(stats->required_gpu_count), static_cast<unsigned>(stats->warm_cpu_count));
+				ImGui::Text("Disk Loads: %u | Uploads: %u | Evicts: %u",
+					static_cast<unsigned>(stats->pending_disk_loads),
+					static_cast<unsigned>(stats->pending_gpu_uploads),
+					static_cast<unsigned>(stats->pending_gpu_evictions));
+				ImGui::Text("Swap Hits: %u | Misses: %u | Skipped Instances: %u",
+					static_cast<unsigned>(stats->swap_hits),
+					static_cast<unsigned>(stats->swap_misses),
+					static_cast<unsigned>(stats->skipped_instances_last_frame));
 			}
 			ImGui::Separator();
 
@@ -445,23 +706,26 @@ namespace sibr {
 			int columnCount = std::max(1, (int)(panelWidth / (tileWidth + padding)));
 
 			if (ImGui::BeginChild("AssetGrid")) {
-				auto& allFields = _resourceManager->getFields();
+				const auto allAssets = _resourceManager->snapshotAssets();
 				int n = 0;
 				std::string fieldPendingDelete;
 
-				for (auto& pair : allFields) {
-					bool isSelected = (_selectedField == pair.first);
+				for (const auto& asset : allAssets) {
+					bool isSelected = (_selectedField == asset.id);
+					const GpuState gpuState = GPUResourceManager::getInstance().state(asset.id);
 
-					ImGui::PushID(pair.first.c_str()); 
+					ImGui::PushID(asset.id.c_str());
 					ImGui::BeginGroup();
 
 					if (ImGui::Selectable("##tile", isSelected, 0, ImVec2(tileWidth, tileHeight))) {
-						_selectedField = pair.first;
+						_selectedField = asset.id;
 					}
 
 					if (ImGui::BeginPopupContextItem("AssetCtx")) {
-						if (ImGui::MenuItem("Delete Asset")) {
-							fieldPendingDelete = pair.first;
+						if (_manifestStore.assets().find(asset.id) == _manifestStore.assets().end()) {
+							if (ImGui::MenuItem("Delete Asset")) {
+								fieldPendingDelete = asset.id;
+							}
 						}
 						ImGui::EndPopup();
 					}
@@ -474,7 +738,8 @@ namespace sibr {
 
 					ImGui::SetCursorScreenPos(ImVec2(cursorPos.x + 5, cursorPos.y + tileHeight - 30));
 					ImGui::PushTextWrapPos(cursorPos.x + tileWidth - 5);
-					ImGui::TextUnformatted(pair.first.c_str());
+					ImGui::TextUnformatted(asset.id.c_str());
+					ImGui::TextDisabled("%s / %s", cpuStateLabel(asset.cpu_state), gpuStateLabel(gpuState));
 					ImGui::PopTextWrapPos();
 
 					ImGui::EndGroup();

@@ -1,6 +1,5 @@
 #include "RenderGaussianInstance.hpp"
 
-#include <projects/extended_gaussian/renderer/resource/GaussianField.hpp>
 #include <projects/extended_gaussian/renderer/scene/GaussianInstance.hpp>
 #include "gpu_resource_manager/GPUResourceManager.hpp"
 #include "gpu_resource_manager/GPUGaussianField.hpp"
@@ -36,14 +35,6 @@ namespace sibr {
 	void RenderGaussianInstance::setAssetId(const std::string& p_assetId, const GaussianField* cpu_field)
 	{
 		assetId = p_assetId;
-
-		if (assetId.empty() || !cpu_field) {
-			return;
-		}
-
-		GPUResourceManager& rm = GPUResourceManager::getInstance();
-		if (!rm.getField(assetId)) {
-			rm.addField(assetId, cpu_field);
-		}
+		(void)cpu_field;
 	}
 }

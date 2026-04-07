@@ -37,6 +37,7 @@ namespace sibr {
 		void onRenderIBR(sibr::IRenderTarget& dst, const sibr::Camera& eye) override;
 
 		void onGUI() override;
+		size_t lastSkippedInstances() const;
 
 	private:
 		bool resizeWorldBuffersIfNeeded(size_t count);
@@ -90,6 +91,7 @@ namespace sibr {
 		std::vector<char> fallback_bytes;
 		float* fallbackBufferCuda = nullptr;
 		std::function<char* (size_t N)> geomBufferFunc, binningBufferFunc, imgBufferFunc;
+		size_t lastSkippedInstances_ = 0;
 
 		BufferCopyRenderer* copyRenderer;
 	};

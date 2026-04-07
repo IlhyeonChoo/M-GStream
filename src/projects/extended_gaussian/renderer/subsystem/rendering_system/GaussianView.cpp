@@ -129,6 +129,7 @@ namespace sibr {
 		glClearNamedBufferData(imageBuffer, GL_RGB32F, GL_RGB, GL_FLOAT, background);
 
 		size_t totalCount = 0;
+		lastSkippedInstances_ = 0;
 		auto& gaussian_instances = owner->getScene()->getInstances();
 		for (auto& it : gaussian_instances) {
 			const auto* gpuField = it.second->getGPUField();
@@ -167,6 +168,9 @@ namespace sibr {
 			auto field = inst->getGPUField();
 			if (!field)
 			{
+				if (!inst->getAssetId().empty()) {
+					++lastSkippedInstances_;
+				}
 				continue;
 			}
 
@@ -238,6 +242,11 @@ namespace sibr {
 	}
 
 	void GaussianView::onGUI() {}
+
+	size_t GaussianView::lastSkippedInstances() const
+	{
+		return lastSkippedInstances_;
+	}
 
 	GaussianView::~GaussianView()
 	{

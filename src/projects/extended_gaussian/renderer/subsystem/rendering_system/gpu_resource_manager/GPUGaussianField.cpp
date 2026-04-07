@@ -7,6 +7,7 @@ namespace sibr {
 	{
 		asset_id = p_assetId;
 		count = p_origin->count;
+		sh_degree = p_origin->sh_degree;
 		CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&pos_cuda, sizeof(Vector3f) * count));
 		CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(pos_cuda, p_origin->pos.data(), sizeof(Vector3f) * count, cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&rot_cuda, sizeof(Vector4f) * count));
@@ -18,6 +19,11 @@ namespace sibr {
 		CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(opacity_cuda, p_origin->opacities.data(), sizeof(float) * count, cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL_ALWAYS(cudaMalloc((void**)&scale_cuda, sizeof(Vector3f) * count));
 		CUDA_SAFE_CALL_ALWAYS(cudaMemcpy(scale_cuda, p_origin->scale.data(), sizeof(Vector3f) * count, cudaMemcpyHostToDevice));
+		bytes = sizeof(Vector3f) * count
+			+ sizeof(Vector4f) * count
+			+ sizeof(float) * sh_coeff_count * count
+			+ sizeof(float) * count
+			+ sizeof(Vector3f) * count;
 	}
 
 	GPUGaussianField::~GPUGaussianField()

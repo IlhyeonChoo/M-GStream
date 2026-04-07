@@ -35,6 +35,31 @@ std::string findLargestNumberedSubdirectory(const std::string& directoryPath) {
 	return largestSubdirectory;
 }
 
+std::string findPointCloudRoot(const std::string& modelPath)
+{
+	const fs::path root(modelPath);
+	const fs::path standardRoot = root / "point_cloud";
+	if (fs::exists(standardRoot) && fs::is_directory(standardRoot)) {
+		return standardRoot.string();
+	}
+
+	const fs::path blockRoot = root / "point_cloud_blocks";
+	if (fs::exists(blockRoot) && fs::is_directory(blockRoot)) {
+		const fs::path preferredScale = blockRoot / "scale_1.0";
+		if (fs::exists(preferredScale) && fs::is_directory(preferredScale)) {
+			return preferredScale.string();
+		}
+
+		for (const auto& entry : fs::directory_iterator(blockRoot)) {
+			if (fs::is_directory(entry)) {
+				return entry.path().string();
+			}
+		}
+	}
+
+	return "";
+}
+
 std::pair<int, int> findArg(const std::string& line, const std::string& name)
 {
 	int start = line.find(name, 0);
@@ -58,13 +83,13 @@ namespace sibr {
 
 		field->name = folderName;
 
-		// 1. °æ·Î Ã³¸®
+		// 1. ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
 		std::string pathWithSlash = modelPath;
 		if (pathWithSlash.back() != '/' && pathWithSlash.back() != '\\') {
 			pathWithSlash += "/";
 		}
 
-		// 2. cfg_args ÆÄ½Ì
+		// 2. cfg_args ï¿½Ä½ï¿½
 		std::ifstream cfgFile(pathWithSlash + "cfg_args");
 		if (!cfgFile.good()) {
 			SIBR_ERR << "Could not find config file 'cfg_args' at " << modelPath;
@@ -75,20 +100,25 @@ namespace sibr {
 		std::getline(cfgFile, cfgLine);
 		auto shRng = findArg(cfgLine, "sh_degree");
 		int runtime_sh_degree = std::stoi(cfgLine.substr(shRng.first, shRng.second - shRng.first));
-		field->sh_degree = runtime_sh_degree; // field¿¡ ÀúÀå
+		field->sh_degree = runtime_sh_degree; // fieldï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-		// 3. ÃÖ½Å iteration Æú´õ Ã£±â
-		std::string plyRoot = pathWithSlash + "point_cloud";
+		// 3. ï¿½Ö½ï¿½ iteration ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
+		std::string plyRoot = findPointCloudRoot(modelPath);
+		if (plyRoot.empty()) {
+			SIBR_ERR << "Could not find point cloud directory at " << modelPath
+				<< " (expected 'point_cloud' or 'point_cloud_blocks/scale_*').";
+			return nullptr;
+		}
 		std::string latestFolder = findLargestNumberedSubdirectory(plyRoot);
 		if (latestFolder.empty()) {
 			SIBR_ERR << "Could not find iteration folder in " << plyRoot;
 			return nullptr;
 		}
 
-		// 4. ÃÖÁ¾ PLY °æ·Î ¿Ï¼º
+		// 4. ï¿½ï¿½ï¿½ï¿½ PLY ï¿½ï¿½ï¿½ ï¿½Ï¼ï¿½
 		std::string finalPlyPath = plyRoot + "/" + latestFolder + "/point_cloud.ply";
 
-		// 5. [ÇÙ½É ¼öÁ¤] ·±Å¸ÀÓ º¯¼ö¸¦ ÄÄÆÄÀÏ Å¸ÀÓ »ó¼ö·Î ¸ÅÇÎ
+		// 5. [ï¿½Ù½ï¿½ ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Å¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 		bool success = false;
 		switch (runtime_sh_degree) {
 		case 0: success = loadPly<0>(finalPlyPath.c_str(), *field); break;
@@ -105,3 +135,4 @@ namespace sibr {
 		return field;
 	}	
 }
+

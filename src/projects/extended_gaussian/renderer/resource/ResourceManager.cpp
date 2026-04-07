@@ -1,46 +1,298 @@
 #include "ResourceManager.hpp"
 
+#include <algorithm>
+
 namespace sibr {
-    bool ResourceManager::addField(GaussianField::UPtr field)
-    {
-        if (!field) return false;
+	size_t ResourceManager::estimateCpuBytes(const GaussianField& field)
+	{
+		size_t total = sizeof(GaussianField);
+		total += field.pos.size() * sizeof(Vector3f);
+		total += field.scale.size() * sizeof(Vector3f);
+		total += field.rot.size() * sizeof(Vector4f);
+		total += field.opacities.size() * sizeof(float);
+		total += field.SHs.size() * sizeof(float);
+		return total;
+	}
 
-        if (fields.find(field->name) != fields.end()) {
-            SIBR_WRG << "GaussianField with name '" << field->name << "' already exists." << std::endl;
-            return false;
-        }
+	bool ResourceManager::addField(GaussianField::UPtr field)
+	{
+		if (!field) {
+			return false;
+		}
 
-        fields.emplace(field->name, std::move(field));
-        return true;
-    }
+		GaussianField::Ptr sharedField(field.release());
+		const AssetId assetId = sharedField->name;
+		if (assetId.empty()) {
+			return false;
+		}
 
-    const GaussianField* ResourceManager::getField(const std::string& name) const
-    {
-        auto itr = fields.find(name);
-        if (itr == fields.end()) {
-            return nullptr;
-        }
-        return itr->second.get();
-    }
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto& record = records_[assetId];
+		record.desc.id = assetId;
+		record.desc.model_dir = sharedField->path;
+		record.desc.bounds_min = sharedField->min_edges;
+		record.desc.bounds_max = sharedField->max_edges;
+		record.desc.estimated_cpu_bytes = estimateCpuBytes(*sharedField);
+		record.pinned_cpu = record.pinned_cpu || record.desc.pin_cpu;
 
-    GaussianField* ResourceManager::getField(const std::string& name)
-    {
-        return const_cast<GaussianField*>(static_cast<const ResourceManager*>(this)->getField(name));
-    }
+		if (record.cpu_state == CpuState::Resident && record.cpu_field) {
+			SIBR_WRG << "GaussianField with asset id '" << assetId << "' already exists." << std::endl;
+			return false;
+		}
 
-    bool ResourceManager::removeField(const std::string& name)
-    {
-        auto itr = fields.find(name);
-        if (itr == fields.end()) {
-            SIBR_WRG << "Cannot remove: GaussianField '" << name << "' not found." << std::endl;
-            return false;
-        }
-        fields.erase(itr);
-        return true;
-    }
+		totalCpuBytes_ -= record.actual_cpu_bytes;
+		record.actual_cpu_bytes = estimateCpuBytes(*sharedField);
+		totalCpuBytes_ += record.actual_cpu_bytes;
+		record.cpu_field = std::move(sharedField);
+		record.cpu_state = CpuState::Resident;
+		return true;
+	}
 
-    const std::unordered_map<std::string, GaussianField::UPtr>& ResourceManager::getFields() const
-    {
-        return fields;
-    }
+	size_t ResourceManager::registerManifest(const ManifestStore& manifest)
+	{
+		size_t registeredCount = 0;
+		for (const auto& assetPair : manifest.assets()) {
+			if (registerAsset(assetPair.second)) {
+				++registeredCount;
+			}
+		}
+		return registeredCount;
+	}
+
+	bool ResourceManager::registerAsset(const AssetDescriptor& descriptor)
+	{
+		if (descriptor.id.empty()) {
+			return false;
+		}
+
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto& record = records_[descriptor.id];
+		record.desc = descriptor;
+		record.pinned_cpu = descriptor.pin_cpu || record.pinned_cpu;
+		return true;
+	}
+
+	bool ResourceManager::unregisterAsset(const AssetId& id)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end()) {
+			return false;
+		}
+		totalCpuBytes_ -= itr->second.actual_cpu_bytes;
+		records_.erase(itr);
+		return true;
+	}
+
+	bool ResourceManager::hasAsset(const AssetId& id) const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		return records_.find(id) != records_.end();
+	}
+
+	const AssetDescriptor* ResourceManager::getDescriptor(const AssetId& id) const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end()) {
+			return nullptr;
+		}
+		return &itr->second.desc;
+	}
+
+	GaussianField::Ptr ResourceManager::getCpuFieldShared(const AssetId& id) const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end()) {
+			return nullptr;
+		}
+		return itr->second.cpu_field;
+	}
+
+	const GaussianField* ResourceManager::getField(const std::string& name) const
+	{
+		return getCpuFieldShared(name).get();
+	}
+
+	GaussianField* ResourceManager::getField(const std::string& name)
+	{
+		return const_cast<GaussianField*>(static_cast<const ResourceManager*>(this)->getField(name));
+	}
+
+	bool ResourceManager::removeField(const std::string& name)
+	{
+		return unregisterAsset(name);
+	}
+
+	CpuState ResourceManager::cpuState(const AssetId& id) const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end()) {
+			return CpuState::Unloaded;
+		}
+		return itr->second.cpu_state;
+	}
+
+	bool ResourceManager::isCpuResident(const AssetId& id) const
+	{
+		return cpuState(id) == CpuState::Resident;
+	}
+
+	bool ResourceManager::beginCpuLoad(const AssetId& id)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end() || itr->second.cpu_state == CpuState::Loading || itr->second.cpu_state == CpuState::Resident) {
+			return false;
+		}
+		itr->second.cpu_state = CpuState::Loading;
+		return true;
+	}
+
+	void ResourceManager::completeCpuLoad(const AssetId& id, GaussianField::Ptr field)
+	{
+		if (!field) {
+			failCpuLoad(id);
+			return;
+		}
+
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto& record = records_[id];
+		record.desc.id = id;
+		record.desc.model_dir = field->path;
+		record.desc.bounds_min = field->min_edges;
+		record.desc.bounds_max = field->max_edges;
+		record.desc.estimated_cpu_bytes = estimateCpuBytes(*field);
+		totalCpuBytes_ -= record.actual_cpu_bytes;
+		record.actual_cpu_bytes = estimateCpuBytes(*field);
+		totalCpuBytes_ += record.actual_cpu_bytes;
+		record.cpu_field = std::move(field);
+		record.cpu_state = CpuState::Resident;
+	}
+
+	void ResourceManager::failCpuLoad(const AssetId& id)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		auto& record = records_[id];
+		record.desc.id = id;
+		record.cpu_state = CpuState::Failed;
+	}
+
+	bool ResourceManager::requestCpuEvict(const AssetId& id)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end() || itr->second.pinned_cpu || itr->second.cpu_state != CpuState::Resident) {
+			return false;
+		}
+		return true;
+	}
+
+	void ResourceManager::evictCpuNow(const AssetId& id)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr == records_.end()) {
+			return;
+		}
+		totalCpuBytes_ -= itr->second.actual_cpu_bytes;
+		itr->second.actual_cpu_bytes = 0;
+		itr->second.cpu_field.reset();
+		itr->second.cpu_state = CpuState::Unloaded;
+	}
+
+	void ResourceManager::markRequested(const AssetId& id, uint64_t frameIndex)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr != records_.end()) {
+			itr->second.last_requested_frame = frameIndex;
+		}
+	}
+
+	void ResourceManager::markVisible(const AssetId& id, uint64_t frameIndex)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr != records_.end()) {
+			itr->second.last_visible_frame = frameIndex;
+		}
+	}
+
+	void ResourceManager::setDesiredCpu(const AssetId& id, bool desired)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr != records_.end()) {
+			itr->second.desired_cpu = desired;
+		}
+	}
+
+	bool ResourceManager::setPinnedCpu(const AssetId& id, bool pinned)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		if (itr != records_.end()) {
+			itr->second.pinned_cpu = pinned;
+			return true;
+		}
+		return false;
+	}
+
+	bool ResourceManager::isPinnedCpu(const AssetId& id) const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		const auto itr = records_.find(id);
+		return itr != records_.end() && itr->second.pinned_cpu;
+	}
+
+	size_t ResourceManager::totalCpuBytes() const
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		return totalCpuBytes_;
+	}
+
+	std::vector<AssetId> ResourceManager::listAssetIds() const
+	{
+		std::vector<AssetId> ids;
+		std::lock_guard<std::mutex> lock(mutex_);
+		ids.reserve(records_.size());
+		for (const auto& recordPair : records_) {
+			ids.emplace_back(recordPair.first);
+		}
+		std::sort(ids.begin(), ids.end());
+		return ids;
+	}
+
+	std::vector<AssetStatus> ResourceManager::snapshotAssets() const
+	{
+		std::vector<AssetStatus> assets;
+		std::lock_guard<std::mutex> lock(mutex_);
+		assets.reserve(records_.size());
+		for (const auto& recordPair : records_) {
+			const auto& record = recordPair.second;
+			assets.push_back(AssetStatus{
+				recordPair.first,
+				record.cpu_state,
+				record.cpu_field != nullptr,
+				record.desired_cpu,
+				record.pinned_cpu,
+				record.actual_cpu_bytes,
+				record.desc.estimated_cpu_bytes,
+				record.desc.priority,
+				record.desc.model_dir
+				});
+		}
+		std::sort(assets.begin(), assets.end(), [](const AssetStatus& lhs, const AssetStatus& rhs) {
+			return lhs.id < rhs.id;
+		});
+		return assets;
+	}
+
+	const std::unordered_map<AssetId, AssetRecord>& ResourceManager::getRecords() const
+	{
+		return records_;
+	}
 }

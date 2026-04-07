@@ -165,8 +165,9 @@ namespace sibr {
 				continue;
 			}
 
-			if (const GaussianField* cpuField = resources->getField(assetId)) {
-				gpuManager.addField(assetId, cpuField);
+			const auto cpuField = resources->getCpuFieldShared(assetId);
+			if (cpuField) {
+				gpuManager.addField(assetId, cpuField.get());
 			}
 		}
 	}

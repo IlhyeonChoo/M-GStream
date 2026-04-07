@@ -27,21 +27,26 @@ namespace sibr {
 		}
 
 		std::lock_guard<std::mutex> lock(mutex_);
+		const auto existing = records_.find(assetId);
+		if (existing != records_.end()
+			&& existing->second.cpu_state == CpuState::Resident
+			&& existing->second.cpu_field) {
+			SIBR_WRG << "GaussianField with asset id '" << assetId << "' already exists." << std::endl;
+			return false;
+		}
+
 		auto& record = records_[assetId];
 		record.desc.id = assetId;
 		record.desc.model_dir = sharedField->path;
 		record.desc.bounds_min = sharedField->min_edges;
 		record.desc.bounds_max = sharedField->max_edges;
-		record.desc.estimated_cpu_bytes = estimateCpuBytes(*sharedField);
+
+		const size_t estimatedBytes = estimateCpuBytes(*sharedField);
+		record.desc.estimated_cpu_bytes = estimatedBytes;
 		record.pinned_cpu = record.pinned_cpu || record.desc.pin_cpu;
 
-		if (record.cpu_state == CpuState::Resident && record.cpu_field) {
-			SIBR_WRG << "GaussianField with asset id '" << assetId << "' already exists." << std::endl;
-			return false;
-		}
-
 		totalCpuBytes_ -= record.actual_cpu_bytes;
-		record.actual_cpu_bytes = estimateCpuBytes(*sharedField);
+		record.actual_cpu_bytes = estimatedBytes;
 		totalCpuBytes_ += record.actual_cpu_bytes;
 		record.cpu_field = std::move(sharedField);
 		record.cpu_state = CpuState::Resident;
@@ -90,16 +95,6 @@ namespace sibr {
 		return records_.find(id) != records_.end();
 	}
 
-	const AssetDescriptor* ResourceManager::getDescriptor(const AssetId& id) const
-	{
-		std::lock_guard<std::mutex> lock(mutex_);
-		const auto itr = records_.find(id);
-		if (itr == records_.end()) {
-			return nullptr;
-		}
-		return &itr->second.desc;
-	}
-
 	GaussianField::Ptr ResourceManager::getCpuFieldShared(const AssetId& id) const
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
@@ -108,16 +103,6 @@ namespace sibr {
 			return nullptr;
 		}
 		return itr->second.cpu_field;
-	}
-
-	const GaussianField* ResourceManager::getField(const std::string& name) const
-	{
-		return getCpuFieldShared(name).get();
-	}
-
-	GaussianField* ResourceManager::getField(const std::string& name)
-	{
-		return const_cast<GaussianField*>(static_cast<const ResourceManager*>(this)->getField(name));
 	}
 
 	bool ResourceManager::removeField(const std::string& name)
@@ -144,7 +129,10 @@ namespace sibr {
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		const auto itr = records_.find(id);
-		if (itr == records_.end() || itr->second.cpu_state == CpuState::Loading || itr->second.cpu_state == CpuState::Resident) {
+		if (itr == records_.end()
+			|| itr->second.cpu_state == CpuState::Loading
+			|| itr->second.cpu_state == CpuState::Resident
+			|| itr->second.cpu_state == CpuState::EvictQueued) {
 			return false;
 		}
 		itr->second.cpu_state = CpuState::Loading;
@@ -187,6 +175,7 @@ namespace sibr {
 		if (itr == records_.end() || itr->second.pinned_cpu || itr->second.cpu_state != CpuState::Resident) {
 			return false;
 		}
+		itr->second.cpu_state = CpuState::EvictQueued;
 		return true;
 	}
 
@@ -194,7 +183,7 @@ namespace sibr {
 	{
 		std::lock_guard<std::mutex> lock(mutex_);
 		const auto itr = records_.find(id);
-		if (itr == records_.end()) {
+		if (itr == records_.end() || itr->second.cpu_state != CpuState::EvictQueued) {
 			return;
 		}
 		totalCpuBytes_ -= itr->second.actual_cpu_bytes;
@@ -276,7 +265,7 @@ namespace sibr {
 			assets.push_back(AssetStatus{
 				recordPair.first,
 				record.cpu_state,
-				record.cpu_field != nullptr,
+				record.cpu_state == CpuState::Resident,
 				record.desired_cpu,
 				record.pinned_cpu,
 				record.actual_cpu_bytes,
@@ -289,10 +278,5 @@ namespace sibr {
 			return lhs.id < rhs.id;
 		});
 		return assets;
-	}
-
-	const std::unordered_map<AssetId, AssetRecord>& ResourceManager::getRecords() const
-	{
-		return records_;
 	}
 }

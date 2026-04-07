@@ -4,6 +4,26 @@
 #include <limits>
 
 namespace {
+	const sibr::AssetDescriptor* manifestDescriptor(const sibr::ManifestStore* manifest, const sibr::AssetId& id)
+	{
+		if (!manifest) {
+			return nullptr;
+		}
+
+		const auto itr = manifest->assets().find(id);
+		if (itr == manifest->assets().end()) {
+			return nullptr;
+		}
+
+		return &itr->second;
+	}
+
+	int assetPriority(const sibr::ManifestStore* manifest, const sibr::AssetId& id)
+	{
+		const auto* descriptor = manifestDescriptor(manifest, id);
+		return descriptor ? descriptor->priority : 0;
+	}
+
 	double maxDouble(double a, double b) {
 		return a > b ? a : b;
 	}
@@ -97,7 +117,7 @@ namespace sibr {
 			return 1.0;
 		}
 
-		const AssetDescriptor* descriptor = registry_.getDescriptor(id);
+		const AssetDescriptor* descriptor = manifestDescriptor(manifest_, id);
 		if (descriptor && descriptor->unload_hysteresis_sec > 0.0f) {
 			return descriptor->unload_hysteresis_sec;
 		}
@@ -176,10 +196,8 @@ namespace sibr {
 	{
 		std::vector<AssetId> uploadOrder(result.required_gpu.begin(), result.required_gpu.end());
 		std::sort(uploadOrder.begin(), uploadOrder.end(), [this](const AssetId& lhs, const AssetId& rhs) {
-			const AssetDescriptor* lhsDesc = registry_.getDescriptor(lhs);
-			const AssetDescriptor* rhsDesc = registry_.getDescriptor(rhs);
-			const int lhsPriority = lhsDesc ? lhsDesc->priority : 0;
-			const int rhsPriority = rhsDesc ? rhsDesc->priority : 0;
+			const int lhsPriority = assetPriority(manifest_, lhs);
+			const int rhsPriority = assetPriority(manifest_, rhs);
 			if (lhsPriority != rhsPriority) {
 				return lhsPriority > rhsPriority;
 			}
@@ -203,7 +221,7 @@ namespace sibr {
 				continue;
 			}
 
-			const AssetDescriptor* descriptor = registry_.getDescriptor(id);
+			const AssetDescriptor* descriptor = manifestDescriptor(manifest_, id);
 			const size_t estimatedBytes = descriptor ? descriptor->estimated_gpu_bytes : 0;
 			if (uploadBudget > 0 && estimatedBytes > 0 && uploadedBytes + estimatedBytes > uploadBudget) {
 				++stats_.pending_gpu_uploads;
@@ -248,10 +266,8 @@ namespace sibr {
 		}
 
 		std::sort(candidates.begin(), candidates.end(), [this](const GPUResourceManager::GpuAssetStatus& lhs, const GPUResourceManager::GpuAssetStatus& rhs) {
-			const AssetDescriptor* lhsDesc = registry_.getDescriptor(lhs.id);
-			const AssetDescriptor* rhsDesc = registry_.getDescriptor(rhs.id);
-			const int lhsPriority = lhsDesc ? lhsDesc->priority : 0;
-			const int rhsPriority = rhsDesc ? rhsDesc->priority : 0;
+			const int lhsPriority = assetPriority(manifest_, lhs.id);
+			const int rhsPriority = assetPriority(manifest_, rhs.id);
 			if (lhsPriority != rhsPriority) {
 				return lhsPriority < rhsPriority;
 			}
@@ -295,10 +311,8 @@ namespace sibr {
 		}
 
 		std::sort(candidates.begin(), candidates.end(), [this](const auto& lhs, const auto& rhs) {
-			const AssetDescriptor* lhsDesc = registry_.getDescriptor(lhs.id);
-			const AssetDescriptor* rhsDesc = registry_.getDescriptor(rhs.id);
-			const int lhsPriority = lhsDesc ? lhsDesc->priority : 0;
-			const int rhsPriority = rhsDesc ? rhsDesc->priority : 0;
+			const int lhsPriority = assetPriority(manifest_, lhs.id);
+			const int rhsPriority = assetPriority(manifest_, rhs.id);
 			if (lhsPriority != rhsPriority) {
 				return lhsPriority < rhsPriority;
 			}

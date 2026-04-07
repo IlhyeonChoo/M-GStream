@@ -15,6 +15,7 @@ namespace sibr {
 		Unloaded,
 		Loading,
 		Resident,
+		EvictQueued,
 		Failed
 	};
 
@@ -22,6 +23,8 @@ namespace sibr {
 		AssetDescriptor desc;
 		CpuState cpu_state = CpuState::Unloaded;
 		GaussianField::Ptr cpu_field;
+		// Callers that hold a copy from getCpuFieldShared() keep the payload alive
+		// until the last shared_ptr is released, even if the record transitions.
 		// Frame indices set by markRequested/markVisible; used by eviction policy.
 		uint64_t last_requested_frame = 0;
 		uint64_t last_visible_frame = 0;
@@ -62,11 +65,7 @@ namespace sibr {
 		bool registerAsset(const AssetDescriptor& descriptor);
 		bool unregisterAsset(const AssetId& id);
 		bool hasAsset(const AssetId& id) const;
-		const AssetDescriptor* getDescriptor(const AssetId& id) const;
 		GaussianField::Ptr getCpuFieldShared(const AssetId& id) const;
-
-		const GaussianField* getField(const std::string& name) const;
-		GaussianField* getField(const std::string& name);
 
 		bool removeField(const std::string& name);
 		CpuState cpuState(const AssetId& id) const;
@@ -84,8 +83,6 @@ namespace sibr {
 		size_t totalCpuBytes() const;
 		std::vector<AssetId> listAssetIds() const;
 		std::vector<AssetStatus> snapshotAssets() const;
-
-		const std::unordered_map<AssetId, AssetRecord>& getRecords() const;
 
 	private:
 		static size_t estimateCpuBytes(const GaussianField& field);

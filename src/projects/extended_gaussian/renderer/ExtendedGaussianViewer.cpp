@@ -440,6 +440,7 @@ namespace sibr {
 		switch (state) {
 		case CpuState::Loading: return "Loading";
 		case CpuState::Resident: return "CPU";
+		case CpuState::EvictQueued: return "Evicting";
 		case CpuState::Failed: return "Failed";
 		case CpuState::Unloaded:
 		default: return "Unloaded";
@@ -605,7 +606,7 @@ namespace sibr {
 
 				if (ImGui::CollapsingHeader("Gaussian Asset", ImGuiTreeNodeFlags_DefaultOpen)) {
 					const std::string& currentAssetId = _selectedInstance->getAssetId();
-					const GaussianField* currentField = _resourceManager->getField(currentAssetId);
+					const auto currentField = _resourceManager->getCpuFieldShared(currentAssetId);
 					std::string currentFieldName = currentAssetId.empty() ? "None" : currentAssetId;
 					if (!currentField && !currentAssetId.empty()) {
 						currentFieldName += " (missing)";

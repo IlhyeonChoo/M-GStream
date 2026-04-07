@@ -50,13 +50,20 @@ cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Commo
 ```
 
 ```powershell
-cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake --install build-portable'
+cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake --build build-portable --target extended_gaussianViewer_app_install'
 ```
 
-설치 후 기본 실행은 아래 둘 중 하나로 한다.
+`cmake --install build-portable` 로 전체 설치를 시도하면, 현재 viewer에 직접 필요하지 않은 다른 타깃이 아직 안 빌드된 경우 실패할 수 있다.  
+Windows에서는 `extended_gaussianViewer_app_install` 타깃을 표준 설치 경로로 사용하는 것을 권장한다.
+
+설치 후 기본 실행은 아래 셋 중 하나로 한다.
 
 ```powershell
 tools\windows\run_installed_viewer.cmd
+```
+
+```powershell
+.\install\scripts\extended_gaussian\run_installed_viewer.cmd
 ```
 
 ```powershell
@@ -94,6 +101,11 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 - 이 문서 사본
 - 번들 루트 실행 스크립트
 - `swaptest/README.txt`
+
+`cmake --install` 이후에는 아래도 같이 설치된다.
+
+- `install/scripts/extended_gaussian/run_installed_viewer.cmd`
+- `install/docs/extended_gaussian_windows_portable_bundle_ko.md`
 
 ## 5. 번들 전달 후 다른 PC에서 실행하는 방법
 

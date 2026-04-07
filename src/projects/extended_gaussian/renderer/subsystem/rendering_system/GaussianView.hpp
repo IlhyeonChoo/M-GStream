@@ -45,14 +45,14 @@ namespace sibr {
 			const GPUGaussianField* source,
 			size_t offset,
 			const Vector3f& position,
-			const Vector3f& eular,
+			const Vector3f& euler,
 			float scale
 		);
 		void TransformPosRotScaleSHsToWorld(
 			const GPUGaussianField* source,
 			size_t offset,
 			const Vector3f& position,
-			const Vector3f& eular,
+			const Vector3f& euler,
 			float scale,
 			float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr, float* w_shs_ptr
 		);

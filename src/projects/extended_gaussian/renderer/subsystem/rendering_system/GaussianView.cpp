@@ -178,7 +178,7 @@ namespace sibr {
 				field,
 				current_world_gausians_count,
 				inst->getOrigin()->getPosition(),
-				inst->getOrigin()->getEular(),
+				inst->getOrigin()->getEuler(),
 				inst->getOrigin()->getScale()
 			);
 		}
@@ -318,7 +318,7 @@ namespace sibr {
 		const GPUGaussianField* source,
 		size_t offset,
 		const Vector3f& position,
-		const Vector3f& eular,
+		const Vector3f& euler,
 		float scale
 	) {
 		if (!source)
@@ -332,7 +332,7 @@ namespace sibr {
 			source,
 			offset,
 			position,
-			eular,
+			euler,
 			scale,
 			world_pos_cuda,
 			world_rot_cuda,
@@ -358,16 +358,16 @@ namespace sibr {
 		const GPUGaussianField* source,
 		size_t offset,
 		const Vector3f& position,
-		const Vector3f& eular,
+		const Vector3f& euler,
 		float scale,
 		float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr, float* w_shs_ptr
 	) {
 		const int count = source->count;
 		const float degToRad = 3.1415926535f / 180.0f;
 
-		Eigen::AngleAxisf roll(eular.x() * degToRad, Vector3f::UnitX());
-		Eigen::AngleAxisf pitch(eular.y() * degToRad, Vector3f::UnitY());
-		Eigen::AngleAxisf yaw(eular.z() * degToRad, Vector3f::UnitZ());
+		Eigen::AngleAxisf roll(euler.x() * degToRad, Vector3f::UnitX());
+		Eigen::AngleAxisf pitch(euler.y() * degToRad, Vector3f::UnitY());
+		Eigen::AngleAxisf yaw(euler.z() * degToRad, Vector3f::UnitZ());
 		Quaternionf q = roll * pitch * yaw;
 
 		Matrix4f worldMat = Matrix4f::Identity();

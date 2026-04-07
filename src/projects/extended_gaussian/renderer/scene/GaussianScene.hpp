@@ -17,7 +17,7 @@ namespace sibr {
 		GaussianScene(const GaussianScene&) = delete;
 		GaussianScene& operator=(const GaussianScene&) = delete;
 
-		GaussianInstance* createInstance(const std::string& name, const std::string& assetId = "", Vector3f p_position = Vector3f(), Vector3f p_eular_angle = Vector3f(), float p_scale = 1.f);
+		GaussianInstance* createInstance(const std::string& name, const std::string& assetId = "", Vector3f p_position = Vector3f(), Vector3f p_euler_angle = Vector3f(), float p_scale = 1.f);
 
 		GaussianInstance* getInstance(const std::string& name);
 		const GaussianInstance* getInstance(const std::string& name) const;

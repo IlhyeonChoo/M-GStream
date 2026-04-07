@@ -593,7 +593,7 @@ namespace sibr {
 					}
 
 					// 2. Rotation
-					if (ImGui::DragFloat3("Rotation", _selectedInstance->getEularRef().data(), 0.5f)) {
+					if (ImGui::DragFloat3("Rotation", _selectedInstance->getEulerRef().data(), 0.5f)) {
 						
 					}
 

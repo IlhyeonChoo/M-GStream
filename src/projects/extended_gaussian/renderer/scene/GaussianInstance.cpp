@@ -6,11 +6,11 @@ namespace sibr {
 	{
 	}
 
-	GaussianInstance::GaussianInstance(const std::string& p_name, const std::string& p_assetId, Vector3f p_position, Vector3f p_eular_angle, float p_scale)
+	GaussianInstance::GaussianInstance(const std::string& p_name, const std::string& p_assetId, Vector3f p_position, Vector3f p_euler_angle, float p_scale)
 		:name(p_name),
 		assetId(p_assetId),
 		position(p_position),
-		eular_angle(p_eular_angle),
+		euler_angle(p_euler_angle),
 		scale(p_scale)
 	{
 	}
@@ -24,9 +24,9 @@ namespace sibr {
 	Quaternionf GaussianInstance::getRotationQuaternion() const {
 		const float degToRad = 3.1415926535f / 180.0f;
 
-		Eigen::AngleAxisf rollAngle(eular_angle.x() * degToRad, Vector3f::UnitX());
-		Eigen::AngleAxisf pitchAngle(eular_angle.y() * degToRad, Vector3f::UnitY());
-		Eigen::AngleAxisf yawAngle(eular_angle.z() * degToRad, Vector3f::UnitZ());
+		Eigen::AngleAxisf rollAngle(euler_angle.x() * degToRad, Vector3f::UnitX());
+		Eigen::AngleAxisf pitchAngle(euler_angle.y() * degToRad, Vector3f::UnitY());
+		Eigen::AngleAxisf yawAngle(euler_angle.z() * degToRad, Vector3f::UnitZ());
 
 		Quaternionf q = rollAngle * pitchAngle * yawAngle;
 
@@ -75,12 +75,12 @@ namespace sibr {
 		position = p_position;
 	}
 
-	const Vector3f& GaussianInstance::getEular() const {
-		return eular_angle;
+	const Vector3f& GaussianInstance::getEuler() const {
+		return euler_angle;
 	}
 
-	void GaussianInstance::setEular(const Vector3f& p_eular) {
-		eular_angle = p_eular;
+	void GaussianInstance::setEuler(const Vector3f& p_euler) {
+		euler_angle = p_euler;
 	}
 
 	float GaussianInstance::getScale() const {
@@ -97,8 +97,8 @@ namespace sibr {
 	Vector3f& GaussianInstance::getPositionRef() {
 		return position;
 	}
-	Vector3f& GaussianInstance::getEularRef() {
-		return eular_angle;
+	Vector3f& GaussianInstance::getEulerRef() {
+		return euler_angle;
 	}
 	float& GaussianInstance::getScaleRef() {
 		return scale;

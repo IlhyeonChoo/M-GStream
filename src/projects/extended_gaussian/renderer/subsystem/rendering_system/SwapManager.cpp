@@ -24,9 +24,6 @@ namespace {
 		return descriptor ? descriptor->priority : 0;
 	}
 
-	double maxDouble(double a, double b) {
-		return a > b ? a : b;
-	}
 }
 
 namespace sibr {
@@ -122,7 +119,7 @@ namespace sibr {
 			return descriptor->unload_hysteresis_sec;
 		}
 
-		return maxDouble(manifest_->settings().default_unload_hysteresis_sec, 0.0);
+		return std::max(manifest_->settings().default_unload_hysteresis_sec, 0.0);
 	}
 
 	void SwapManager::updateDesiredStates(const PolicyResult& result)
@@ -223,15 +220,20 @@ namespace sibr {
 
 			const AssetDescriptor* descriptor = manifestDescriptor(manifest_, id);
 			const size_t estimatedBytes = descriptor ? descriptor->estimated_gpu_bytes : 0;
-			if (uploadBudget > 0 && estimatedBytes > 0 && uploadedBytes + estimatedBytes > uploadBudget) {
+			// If size is unknown (0), skip per-frame budget enforcement but still
+			// allow the upload. This is safe only for small manifests; if assets
+			// lack estimated_gpu_bytes entries, VRAM pressure is uncontrolled.
+			const bool sizeKnown = estimatedBytes > 0;
+
+			if (sizeKnown && uploadBudget > 0 && uploadedBytes + estimatedBytes > uploadBudget) {
 				++stats_.pending_gpu_uploads;
 				continue;
 			}
-			if (targetBytes > 0 && estimatedBytes > 0 && residentBytes + estimatedBytes > targetBytes) {
+			if (sizeKnown && targetBytes > 0 && residentBytes + estimatedBytes > targetBytes) {
 				const size_t bytesNeeded = residentBytes + estimatedBytes - targetBytes;
 				residentBytes -= std::min(residentBytes, evictGpuForBudget(result, bytesNeeded));
 			}
-			if (targetBytes > 0 && estimatedBytes > 0 && residentBytes + estimatedBytes > targetBytes) {
+			if (sizeKnown && targetBytes > 0 && residentBytes + estimatedBytes > targetBytes) {
 				++stats_.pending_gpu_uploads;
 				continue;
 			}
@@ -274,9 +276,12 @@ namespace sibr {
 			return lhs.actual_gpu_bytes > rhs.actual_gpu_bytes;
 		});
 
+		const size_t budgetSetting = manifest_ ? manifest_->settings().max_gpu_evictions_per_frame : 0;
+		size_t remainingBudget = (budgetSetting == 0) ? std::numeric_limits<size_t>::max() : budgetSetting;
+
 		size_t freedBytes = 0;
 		for (const auto& candidate : candidates) {
-			if (freedBytes >= bytesNeeded) {
+			if (freedBytes >= bytesNeeded || remainingBudget == 0) {
 				break;
 			}
 			if (!gpuManager_.requestEvict(candidate.id)) {
@@ -284,6 +289,7 @@ namespace sibr {
 			}
 			gpuManager_.evictNow(candidate.id);
 			freedBytes += candidate.actual_gpu_bytes;
+			--remainingBudget;
 			++stats_.pending_gpu_evictions;
 		}
 		return freedBytes;
@@ -319,10 +325,10 @@ namespace sibr {
 			return lhs.actual_gpu_bytes > rhs.actual_gpu_bytes;
 		});
 
-		size_t remainingBudget = manifest_ ? manifest_->settings().max_gpu_evictions_per_frame : candidates.size();
-		if (remainingBudget == 0) {
-			remainingBudget = candidates.size();
-		}
+		const size_t budgetSetting = manifest_ ? manifest_->settings().max_gpu_evictions_per_frame : 0;
+		// 0 means no per-frame limit; use SIZE_MAX as the sentinel to avoid
+		// re-computing candidates.size() in the loop condition.
+		size_t remainingBudget = (budgetSetting == 0) ? std::numeric_limits<size_t>::max() : budgetSetting;
 
 		for (const auto& candidate : candidates) {
 			if (remainingBudget == 0) {
@@ -347,10 +353,8 @@ namespace sibr {
 			return lhs.actual_cpu_bytes > rhs.actual_cpu_bytes;
 		});
 
-		size_t remainingBudget = manifest_ ? manifest_->settings().max_cpu_evictions_per_frame : assets.size();
-		if (remainingBudget == 0) {
-			remainingBudget = assets.size();
-		}
+		const size_t cpuBudgetSetting = manifest_ ? manifest_->settings().max_cpu_evictions_per_frame : 0;
+		size_t remainingBudget = (cpuBudgetSetting == 0) ? std::numeric_limits<size_t>::max() : cpuBudgetSetting;
 
 		for (const auto& asset : assets) {
 			if (remainingBudget == 0) {

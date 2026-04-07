@@ -3,10 +3,10 @@
 #include "ManifestStore.hpp"
 
 #include <boost/filesystem.hpp>
+#include <core/system/Config.hpp>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
-# include <core/system/Config.hpp>
 #include "Config.hpp"
 #include "GaussianField.hpp"
 
@@ -22,6 +22,7 @@ namespace sibr {
 		AssetDescriptor desc;
 		CpuState cpu_state = CpuState::Unloaded;
 		GaussianField::Ptr cpu_field;
+		// Frame indices set by markRequested/markVisible; used by eviction policy.
 		uint64_t last_requested_frame = 0;
 		uint64_t last_visible_frame = 0;
 		bool desired_cpu = false;
@@ -29,6 +30,8 @@ namespace sibr {
 		size_t actual_cpu_bytes = 0;
 	};
 
+	// Thread-safe snapshot of an AssetRecord for external consumers.
+	// Returned by snapshotAssets(); safe to read without holding the mutex.
 	struct AssetStatus {
 		AssetId id;
 		CpuState cpu_state = CpuState::Unloaded;
@@ -41,6 +44,10 @@ namespace sibr {
 		boost::filesystem::path model_dir;
 	};
 
+	// Manages the CPU-side GaussianField asset registry.
+	// All public methods are thread-safe; they acquire mutex_ internally.
+	// The sole exception is the private static estimateCpuBytes(), which is
+	// stateless and operates only on its argument.
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT ResourceManager {
 	public:
 		SIBR_CLASS_PTR(ResourceManager);

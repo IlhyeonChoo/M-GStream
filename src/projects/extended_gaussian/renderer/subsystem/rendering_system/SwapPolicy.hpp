@@ -22,8 +22,12 @@ namespace sibr {
 	};
 
 	struct PolicyResult {
+		// Assets that must be GPU-resident this frame for rendering.
 		std::unordered_set<AssetId> required_gpu;
+		// Assets that should be CPU-resident for fast future upload (prefetch).
 		std::unordered_set<AssetId> warm_cpu;
+		// Assets that must not be evicted this frame regardless of memory pressure.
+		// Superset: includes required_gpu assets and pin_cpu/pin_gpu assets.
 		std::unordered_set<AssetId> protected_assets;
 	};
 

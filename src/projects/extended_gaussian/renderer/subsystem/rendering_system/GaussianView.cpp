@@ -69,6 +69,10 @@ namespace sibr {
 	};
 
 	std::function<char* (size_t N)> resizeFunctional(void** ptr, size_t& S) {
+		// Returns a resize callback for a CUDA scratch buffer.
+		// Allocates 2x the requested size to amortise repeated growth.
+		// The caller (CudaRasterizer) owns the pointer via ptr; this closure
+		// captures ptr by pointer and S by reference so both remain live.
 		auto lambda = [ptr, &S](size_t N) {
 			if (N > S)
 			{
@@ -307,7 +311,7 @@ namespace sibr {
 
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_rect_cuda, max_gaussians_count * 2 * sizeof(int)));
 
-			std::cout << "[VRAM] Resized ALL World Buffers for " << max_gaussians_count << " gaussians." << std::endl;
+			SIBR_LOG << "[VRAM] Resized world buffers for " << max_gaussians_count << " gaussians." << std::endl;
 
 			return true;
 		}
@@ -328,7 +332,7 @@ namespace sibr {
 
 		current_world_gausians_count += source->count;
 
-		TransformPosRotScaleSHsToWorld(
+		TransformPosRotScaleToWorld(
 			source,
 			offset,
 			position,
@@ -336,8 +340,7 @@ namespace sibr {
 			scale,
 			world_pos_cuda,
 			world_rot_cuda,
-			world_scale_cuda,
-			world_shs_cuda
+			world_scale_cuda
 		);
 
 		appendSHsToWorld(
@@ -354,13 +357,13 @@ namespace sibr {
 		);
 	}
 
-	void GaussianView::TransformPosRotScaleSHsToWorld(
+	void GaussianView::TransformPosRotScaleToWorld(
 		const GPUGaussianField* source,
 		size_t offset,
 		const Vector3f& position,
 		const Vector3f& euler,
 		float scale,
-		float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr, float* w_shs_ptr
+		float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr
 	) {
 		const int count = source->count;
 		const float degToRad = 3.1415926535f / 180.0f;

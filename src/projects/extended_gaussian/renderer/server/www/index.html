@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Extended Gaussian Remote Stream Reference Client</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="hero">
+      <p class="eyebrow">Reference Client</p>
+      <h1>Extended Gaussian Remote Stream</h1>
+      <p class="intro">
+        This page is a protocol reference for the future Ubuntu remote browser stream mode.
+        It assumes the server exposes <code>/stream.mjpg</code> and <code>/control</code>.
+      </p>
+      <p class="hint">
+        The payload formatter applies the same baseline validation as the current C++ parser:
+        <code>0 &lt; fovy &lt; pi</code>, non-zero vectors, and no parallel or near-parallel
+        <code>forward</code>/<code>up</code> pair.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Connection</h2>
+      <div class="grid two-col">
+        <label>
+          <span>HTTP origin</span>
+          <input id="http-origin" type="text" value="">
+        </label>
+        <label>
+          <span>WebSocket URL</span>
+          <input id="ws-url" type="text" value="">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="apply-defaults" type="button">Use Current Origin</button>
+        <button id="open-stream" type="button">Open Stream</button>
+        <button id="connect-ws" type="button">Connect WebSocket</button>
+        <button id="disconnect-ws" type="button">Disconnect</button>
+      </div>
+      <p id="status-line" class="status">WebSocket: disconnected</p>
+      <img id="stream-preview" alt="MJPEG stream preview">
+    </section>
+
+    <section class="panel">
+      <h2>Camera Pose</h2>
+      <div class="grid three-col">
+        <label>
+          <span>Position</span>
+          <input id="position" type="text" value="[0, 0, 0]">
+        </label>
+        <label>
+          <span>Forward</span>
+          <input id="forward" type="text" value="[0, 0, -1]">
+        </label>
+        <label>
+          <span>Up</span>
+          <input id="up" type="text" value="[0, 1, 0]">
+        </label>
+      </div>
+      <div class="grid two-col">
+        <label>
+          <span>FOV Y (radians)</span>
+          <input id="fovy" type="text" value="0.78539816339">
+        </label>
+        <label>
+          <span>Message type</span>
+          <input id="message-type" type="text" value="set_camera_pose" readonly>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="format-payload" type="button">Format Payload</button>
+        <button id="send-payload" type="button">Send Payload</button>
+      </div>
+      <label class="block">
+        <span>JSON payload</span>
+        <textarea id="payload" rows="14"></textarea>
+      </label>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

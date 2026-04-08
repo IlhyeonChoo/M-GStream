@@ -34,6 +34,141 @@
 - 이후 Windows 이식성, Ubuntu 24.04 포팅, Ubuntu Server 원격 스트리밍 브랜치에서는 모두 이 이슈를 추적 대상으로 유지한다.
 - 특히 headless EGL 경로와 remote server mode에서도 장시간 카메라 이동 시 재현 여부를 별도로 다시 확인해야 한다.
 
+### 0.2 `develop/ubuntu24-remote-browser-stream` 선행 작업 추가
+
+Ubuntu 24.04 remote browser stream 브랜치에서는 실제 headless renderer / HTTP / WebSocket 서버 구현에 들어가기 전에, 후속 브랜치가 공통으로 재사용할 수 있는 **저충돌 선행 작업**만 먼저 추가했다.
+
+이번 선행 작업의 원칙은 다음과 같다.
+
+- 기존 hot path 파일은 수정하지 않는다.
+- 신규 파일만 추가한다.
+- 목표는 기능 활성화가 아니라 **공용 계약 선점**과 **참조 자산 준비**다.
+
+추가한 항목은 다음과 같다.
+
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.hpp`
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.cpp`
+- `src/projects/extended_gaussian/renderer/server/CameraPoseAdapter.hpp`
+- `src/projects/extended_gaussian/renderer/server/CameraPoseAdapter.cpp`
+- `src/projects/extended_gaussian/renderer/server/www/index.html`
+- `src/projects/extended_gaussian/renderer/server/www/app.js`
+- `src/projects/extended_gaussian/renderer/server/www/styles.css`
+
+구체적으로는 아래 내용을 고정했다.
+
+- server mode 공용 옵션 구조
+  - `ServerOptions`
+  - 기본값
+    - `listen_host=127.0.0.1`
+    - `listen_port=8080`
+    - `stream_width=1280`
+    - `stream_height=720`
+    - `stream_fps=15`
+- browser control message 공용 계약
+  - 메시지 타입은 현재 `set_camera_pose` 1종만 정의
+  - 필드
+    - `position`
+    - `forward`
+    - `up`
+    - `fovy`
+  - wire format 규칙
+    - 벡터는 길이 3의 number array
+    - `fovy` 단위는 radians
+- `RemoteCameraPose <-> sibr::InputCamera` 변환 유틸
+  - `forward/up` finite 검증
+  - zero vector 금지
+  - 평행 금지
+  - 직교 기저 재구성 규칙 고정
+- browser reference client
+  - `/stream.mjpg` 미리보기
+  - `/control` WebSocket 연결/해제
+  - `set_camera_pose` payload 생성/전송
+
+이번에 **의도적으로 하지 않은 것**은 다음과 같다.
+
+- `main.cpp` server mode 진입 추가
+- `ExtendedGaussianViewer` / `RenderingSystem` / `GaussianView` 연결
+- EGL headless context
+- 실제 HTTP / MJPEG / WebSocket 서버 구현
+- install / resource packaging wiring
+
+이 선행 작업은 후속 브랜치에서 다음 용도로 재사용한다.
+
+- 실제 server runtime이 CLI를 읽을 때 `ServerOptions` 재사용
+- WebSocket handler가 control payload를 해석할 때 `ParseControlMessageJson(...)` 재사용
+- remote camera 제어를 `InputCamera`에 반영할 때 `TryBuildInputCamera(...)` 재사용
+- 브라우저 초안 페이지를 실제 서버 정적 자산으로 승격할 때 `renderer/server/www/` 내용 재사용
+
+검증 메모:
+
+- 신규 C++ 파일은 `c++ -std=gnu++17 -fpermissive -fsyntax-only ...`로 문법 검증했다.
+- 전체 `cmake -S . -B build-ninja -G Ninja` configure는 실패했지만,
+  현재 남아 있는 partial configure 산출물만으로는 exact fatal line을 확정하지 않았다.
+- 다만 보존된 증거상 `renderer` 서브프로젝트의 CUDA compiler identification 단계까지는 도달했고,
+  최종 generator 파일 `build.ninja`는 생성되지 않았다.
+- `plan/2026-04-08-ubuntu24-remote-browser-stream-prep.md`도 함께 작성했지만, 현재 저장소의 `.gitignore`에 `plan` 디렉터리가 포함되어 있어 기본 `git status`에는 나타나지 않는다. 따라서 작업 이력의 기준 문서는 본 `docs/extended_gaussian_modification_log_ko.md` 항목으로 본다.
+
+### 0.3 remote browser stream 선행 작업 리뷰 반영
+
+`docs/extended_gaussian_ubuntu24_remote_browser_stream_prep_review_ko.md`의 지적을 반영해,
+선행 작업 계약을 다음과 같이 정리했다.
+
+- `ParseControlMessageJson(...)`의 입력 타입에서 `std::string_view`를 제거했다.
+  - 이유: 저장소의 Windows / Visual Studio 기본 경로는 여전히 C++14를 사용하므로,
+    C++17 전용 타입을 공용 선행 모듈에 남기지 않기 위해서다.
+- control parser에 trailing content 거부를 추가했다.
+  - 이제 JSON object 뒤에 비공백 문자가 남아 있으면 parse 실패로 처리한다.
+- camera pose validation의 문서 표현을 구현 기준에 맞췄다.
+  - 기존 문서의 "평행 금지"를 "평행 또는 near-parallel 금지"로 수정했다.
+- browser reference client에도 parser와 같은 최소 validation을 반영했다.
+  - `0 < fovy < pi`
+  - zero vector 금지
+  - `forward` / `up`의 평행 또는 near-parallel 금지
+
+추가 검증 메모:
+
+- 신규 C++ 파일은 `c++ -std=gnu++14 -fpermissive -fsyntax-only ...`로도 다시 확인했다.
+- 다만 전체 `cmake -S . -B build-ninja -G Ninja` configure는 여전히 실패했고,
+  현재 남아 있는 산출물만으로는 exact fatal line을 확정하지 않았다.
+- 보존된 증거상 `renderer` 서브프로젝트의 CUDA compiler identification 단계까지는 도달했고,
+  최종 generator 파일 `build.ninja`는 생성되지 않았다.
+
+### 0.4 remote browser stream follow-up 문서 / 샘플 추가
+
+`docs/extended_gaussian_develop_ubuntu24_remote_browser_stream_followup_plan_ko.md`에서
+"지금 브랜치에서 안전하게 선점 가능한 후속 작업"으로 분류한 항목 중,
+실제 runtime 통합 없이 추가 가능한 문서와 샘플을 다음과 같이 정리했다.
+
+추가한 항목:
+
+- `docs/extended_gaussian_ubuntu24_toolchain_status_ko.md`
+- `docs/extended_gaussian_remote_control_examples_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_manual_checklist_ko.md`
+- `docs/extended_gaussian_remote_camera_contract_ko.md`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/valid_set_camera_pose_default.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_missing_fovy.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_position_length.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_fovy_out_of_range.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_forward_zero.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_forward_up_near_parallel.json`
+- `src/projects/extended_gaussian/renderer/server/examples/control_messages/invalid_trailing_content.txt`
+- `src/projects/extended_gaussian/renderer/server/www/README.md`
+
+정리한 내용:
+
+- partial `build-ninja/` configure 산출물 기준의 Ubuntu 24.04 CUDA toolchain stop point 기록
+- `set_camera_pose` 정상 / 실패 payload 예제와 expected parser result 정리
+- `/stream.mjpg` / `/control` 구현 이후 사용할 수동 검증 체크리스트 정리
+- `position`, `forward`, `up`, `fovy` 의미와 `TryBuildInputCamera(...)`의 직교화 규칙 문서화
+- `renderer/server/www/`가 최종 제품 UI가 아니라 protocol reference client라는 점을 별도 README로 고정
+
+이번 follow-up 묶음의 원칙:
+
+- 기존 hot path 파일은 수정하지 않는다.
+- `main.cpp`, `ExtendedGaussianViewer`, `RenderingSystem`, `GaussianView`는 건드리지 않는다.
+- 실제 HTTP / MJPEG / WebSocket 구현은 포함하지 않는다.
+- 후속 브랜치가 바로 참조 가능한 기준 문서와 샘플만 추가한다.
+
 ## 1. 목적
 
 이번 작업의 목적은 두 가지였다.

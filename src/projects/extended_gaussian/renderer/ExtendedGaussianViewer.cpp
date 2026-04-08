@@ -371,7 +371,7 @@ namespace sibr {
 			}
 
 			_selectedInstance = instance;
-			_subsystem[RENDERING_SYSTEM]->onInstaceCreated(*instance);
+			_subsystem[RENDERING_SYSTEM]->onInstanceCreated(*instance);
 			++createdCount;
 		}
 
@@ -543,7 +543,7 @@ namespace sibr {
 				if (ImGui::Button("Create", ImVec2(120, 0))) {
 					_selectedInstance = _scene->createInstance(nameBuf, previewAssetId, tempPos, tempRot, tempScale);
 					if (_selectedInstance) {
-						_subsystem[RENDERING_SYSTEM]->onInstaceCreated(*_selectedInstance);
+						_subsystem[RENDERING_SYSTEM]->onInstanceCreated(*_selectedInstance);
 
 						SIBR_LOG << "Instance created: " << nameBuf << (previewAssetId.empty() ? " (No Asset)" : "") << std::endl;
 						ImGui::CloseCurrentPopup();
@@ -615,13 +615,13 @@ namespace sibr {
 					if (ImGui::BeginCombo("Source Field", currentFieldName.c_str())) {
 						if (ImGui::Selectable("None", currentAssetId.empty())) {
 							_selectedInstance->setAssetId("");
-							_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
+							_subsystem[RENDERING_SYSTEM]->onInstanceUpdated(*_selectedInstance);
 						}
 						for (const auto& assetId : _resourceManager->listAssetIds()) {
 							bool isSourceSelected = (assetId == currentAssetId);
 							if (ImGui::Selectable(assetId.c_str(), isSourceSelected)) {
 								_selectedInstance->setAssetId(assetId);
-								_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
+								_subsystem[RENDERING_SYSTEM]->onInstanceUpdated(*_selectedInstance);
 							}
 						}
 						ImGui::EndCombo();

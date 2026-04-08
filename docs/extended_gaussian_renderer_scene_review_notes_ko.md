@@ -114,7 +114,7 @@
 
 주의할 점:
 
-- 저장소 규칙상 `onInstaceCreated` 같은 load-bearing typo가 존재하며, 부분 rename은 위험하다
+- 저장소 규칙상 이런 public API rename은 부분 수정이 아니라 인터페이스-구현-호출부를 함께 바꿔야 한다
 - 이번 rename은 보기에는 단순 정리지만, scene/UI/render hot path를 가로지르는 public API 이름을 바꾼다
 - 외부 직렬화, reflection, editor extension이 없더라도 grep 범위를 놓치면 컴파일은 돼도 런타임 의미가 바뀔 수 있다
 

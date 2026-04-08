@@ -34,6 +34,77 @@
 - 이후 Windows 이식성, Ubuntu 24.04 포팅, Ubuntu Server 원격 스트리밍 브랜치에서는 모두 이 이슈를 추적 대상으로 유지한다.
 - 특히 headless EGL 경로와 remote server mode에서도 장시간 카메라 이동 시 재현 여부를 별도로 다시 확인해야 한다.
 
+### 0.2 Windows portable bundle 후속 수정 기록
+
+이번 세션에서는 Windows portable bundle 관련 리뷰 문서와 후속 계획 문서를 기준으로, 실제 bundle 생성/검증 스크립트와 install 책임 경계를 정리했다.
+
+기준 문서는 다음 두 개였다.
+
+- `docs/extended_gaussian_windows_portable_bundle_review_ko.md`
+- `plan/2026-04-08-windows-portable-bundle-review-followups.md`
+
+핵심 수정 사항은 다음과 같다.
+
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - 기본 `BuildRoot`를 `build/`로 변경했다.
+  - single-config build tree를 명시적으로 넘겼을 때 `CMAKE_BUILD_TYPE`와 `-Config`가 다르면 즉시 실패하도록 했다.
+  - package 단계에 요청 `Config`를 명시적으로 전달하도록 바꿨다.
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/CMakeLists.txt`
+  - Windows portable runtime 포함 책임을 package 단계가 아니라 install 단계로 이동시켰다.
+  - `CUDA::cudart`와 `xatlas` runtime artifact를 install 시점에 직접 포함하도록 정리했다.
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - `install/`을 수정하지 않고 bundle 복사 + preflight만 수행하도록 유지했다.
+  - 요청 `Config`에 맞는 viewer executable만 선택하도록 config-aware packaging 로직을 추가했다.
+  - 번들 루트에 `selected_viewer_exe.txt`를 기록해, 번들 실행 시 선택된 executable을 다시 사용할 수 있게 했다.
+- `tools/windows/check_windows_runtime.ps1`
+  - 사용자가 직접 넘긴 `-ManifestPath`가 없거나 형식이 잘못되면 `exit 3`으로 실패하도록 강화했다.
+  - 선택된 viewer executable suffix에 맞춰 `_d` / `_rwdi` runtime DLL을 구분해서 검사하도록 바꿨다.
+  - `xatlas*.dll`도 runtime 필수 항목으로 추가했다.
+  - 현재 exit code 의미는 아래처럼 유지된다.
+    - `0`: 통과
+    - `1`: runtime 또는 GPU 문제
+    - `2`: manifest가 가리키는 asset data root 누락
+    - `3`: manifest 경로 또는 manifest 형식 문제
+- `tools/windows/run_portable_bundle.cmd`
+  - 번들 생성 시 기록된 `selected_viewer_exe.txt`를 먼저 읽고, 그 executable을 우선 실행하도록 수정했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - install 단계가 runtime DLL 포함의 단일 진실 원천이고, package 단계는 번들링 및 preflight만 수행한다는 점을 반영해 문서를 갱신했다.
+  - `package_windows_portable_bundle.ps1 -Config ...` 사용 예시와 `selected_viewer_exe.txt` 동작도 추가로 기록했다.
+
+이번 수정으로 해결한 문제는 다음과 같다.
+
+- `build-ninja`처럼 single-config `Debug` build tree를 명시적으로 허용해도, stale `*_rwdi.exe`가 bundle에 들어가던 문제
+- preflight가 `xatlas` 누락을 잡지 못하던 문제
+- package 단계가 runtime 포함 책임까지 가져가면서 `install/`을 수정하던 설계 혼선
+- bundle launcher가 실제 bundle 생성 시 선택된 config와 다른 executable을 집을 수 있던 문제
+
+검증은 아래 항목까지 완료했다.
+
+- 기본 인자 `tools/windows/build_windows_portable_bundle.ps1` 실행
+  - `build/`를 사용해 `RelWithDebInfo` build -> install -> package -> runtime-only preflight가 통과했다.
+  - bundle은 `extended_gaussianViewer_app_rwdi.exe`를 선택했다.
+- `tools/windows/build_windows_portable_bundle.ps1 -BuildRoot .\build-ninja -Config Debug` 실행
+  - single-config `Debug` build tree 기준으로 build -> install -> package -> runtime-only preflight가 통과했다.
+  - bundle은 `extended_gaussianViewer_app_d.exe`를 선택했다.
+- `tools/windows/check_windows_runtime.ps1`
+  - 없는 manifest 경로는 `exit 3`
+  - asset data root가 없는 manifest는 `exit 2`
+  - `xatlas_rwdi.dll`을 제거한 임시 install 복사본은 `exit 1`
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - package 실행 전후 `install/bin` 스냅샷을 비교해, package 단계가 `install/`을 수정하지 않는 것을 확인했다.
+  - bundle root의 `selected_viewer_exe.txt`가 실제 선택된 executable 이름을 기록하는 것도 확인했다.
+
+이번 변경은 아래 두 커밋으로 남겼다.
+
+- `395a399` `fix: tighten windows portable bundle packaging`
+- `8777379` `docs: update windows portable bundle guide`
+
+남겨 둔 주의 사항은 다음과 같다.
+
+- 이번 세션에서는 `Debug`와 `RelWithDebInfo` 경로를 실제로 검증했다.
+- `Release` / `MinSizeRel`은 executable 선택 매핑은 넣었지만, end-to-end 실행 검증은 아직 하지 않았다.
+- GUI viewer를 실제로 장시간 띄워 조작하는 수동 시나리오까지는 다시 수행하지 않았고, 이번 범위의 검증은 build/install/package/preflight 중심이다.
+
 ## 1. 목적
 
 이번 작업의 목적은 두 가지였다.

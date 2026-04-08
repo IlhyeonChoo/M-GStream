@@ -6,6 +6,47 @@
 
 ## 0. 2026-04-08 후속 메모
 
+### 0.5 Portable bundle Turing+ 지원 범위 정합화
+
+Windows portable bundle의 CUDA 지원 범위를 빌드, 패키징 검증, 런타임 가드, 사용자 문서에서 동일하게 맞췄다.
+
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+  - portable bundle 기본 CUDA 아키텍처를 `75-real;86-real;89-real;120`으로 조정했다.
+  - 따라서 기본 지원 범위는 Turing(SM 7.5)부터 Blackwell(SM 12.0)까지다.
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - portable bundle 검증 목록도 `75`, `86`, `89`, `120`으로 맞췄다.
+  - 누락 시 재configure 예시도 같은 값으로 안내한다.
+- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.cpp`
+  - 런타임 가드를 `SM 7.5+` 기준으로 바꾸고, 구형 GPU에서는 첫 커널 디스패치까지 가지 않도록 명확한 에러 메시지로 조기 종료하게 했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - direct build 예시, bundle 검증 설명, 재configure 힌트, 지원 GPU 범위를 모두 같은 기준으로 갱신했다.
+
+### 0.4 Windows portable CUDA 아키텍처 고정
+
+다른 Windows PC에서 portable bundle을 실행했을 때 `no kernel image is available for execution on the device`가 보고됐다.
+
+이번 확인에서 핵심 원인은 build tree cache에 남아 있던 `CMAKE_CUDA_ARCHITECTURES=52`였다.
+이 값으로 build된 CUDA 바이너리는 최신 GeForce RTX 50 계열 같은 새 GPU까지 고려한 portable bundle 기준으로는 너무 좁다.
+
+이번 후속 수정은 아래 두 군데에 적용했다.
+
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+  - 프로젝트 전용 cache 변수 `EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES`를 추가했다.
+  - 기본값을 `86-real;89-real;90-real;120`으로 두고, `extended_gaussian` 본체와 `CudaRasterizer` 둘 다 이 값을 명시적으로 사용하도록 고정했다.
+  - 따라서 generator별 `native` 해석이나 과거 cache 값에 덜 의존하게 됐다.
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - viewer build 직후 build tree cache를 다시 읽어, portable bundle용 CUDA 아키텍처가 `86`, `89`, `90`, `120`을 모두 포함하는지 확인하도록 했다.
+  - 누락 시 install/package 전에 즉시 실패시키고, 재configure 인자를 에러 메시지에 같이 출력하도록 했다.
+
+관련 문서도 함께 업데이트했다.
+
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - 새 Windows PC direct build 예시에 `-DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=86-real;89-real;90-real;120`를 명시했다.
+  - portable bundle 스크립트가 build 직후 CUDA 아키텍처를 검증한다는 점을 추가했다.
+
+이번 수정은 아직 end-to-end CUDA rebuild까지 여기서 다시 돌리지는 않았다.
+이유는 현재 저장소 규칙상 기존 build tree를 재사용하는 편을 우선했고, 실제 효과 검증에는 한 번의 reconfigure + rebuild가 필요하기 때문이다.
+
 ### 0.1 `develop/phase1-manifest-swap -> main` 머지 전 known issue
 
 `develop/phase1-manifest-swap` 브랜치는 Phase 1 manifest / swap 구현과 후속 정리 커밋들을 포함한 상태이며, `main` 머지 후보로 취급하고 있다.  
@@ -34,7 +75,7 @@
 - 이후 Windows 이식성, Ubuntu 24.04 포팅, Ubuntu Server 원격 스트리밍 브랜치에서는 모두 이 이슈를 추적 대상으로 유지한다.
 - 특히 headless EGL 경로와 remote server mode에서도 장시간 카메라 이동 시 재현 여부를 별도로 다시 확인해야 한다.
 
-### 0.2 `develop/ubuntu24-remote-browser-stream` 선행 작업 추가
+### 0.8 `develop/ubuntu24-remote-browser-stream` 선행 작업 추가
 
 Ubuntu 24.04 remote browser stream 브랜치에서는 실제 headless renderer / HTTP / WebSocket 서버 구현에 들어가기 전에, 후속 브랜치가 공통으로 재사용할 수 있는 **저충돌 선행 작업**만 먼저 추가했다.
 
@@ -108,7 +149,7 @@ Ubuntu 24.04 remote browser stream 브랜치에서는 실제 headless renderer /
   최종 generator 파일 `build.ninja`는 생성되지 않았다.
 - `plan/2026-04-08-ubuntu24-remote-browser-stream-prep.md`도 함께 작성했지만, 현재 저장소의 `.gitignore`에 `plan` 디렉터리가 포함되어 있어 기본 `git status`에는 나타나지 않는다. 따라서 작업 이력의 기준 문서는 본 `docs/extended_gaussian_modification_log_ko.md` 항목으로 본다.
 
-### 0.3 remote browser stream 선행 작업 리뷰 반영
+### 0.9 remote browser stream 선행 작업 리뷰 반영
 
 `docs/extended_gaussian_ubuntu24_remote_browser_stream_prep_review_ko.md`의 지적을 반영해,
 선행 작업 계약을 다음과 같이 정리했다.
@@ -133,7 +174,7 @@ Ubuntu 24.04 remote browser stream 브랜치에서는 실제 headless renderer /
 - 보존된 증거상 `renderer` 서브프로젝트의 CUDA compiler identification 단계까지는 도달했고,
   최종 generator 파일 `build.ninja`는 생성되지 않았다.
 
-### 0.4 remote browser stream follow-up 문서 / 샘플 추가
+### 1.0 remote browser stream follow-up 문서 / 샘플 추가
 
 `docs/extended_gaussian_develop_ubuntu24_remote_browser_stream_followup_plan_ko.md`에서
 "지금 브랜치에서 안전하게 선점 가능한 후속 작업"으로 분류한 항목 중,
@@ -168,6 +209,124 @@ Ubuntu 24.04 remote browser stream 브랜치에서는 실제 headless renderer /
 - `main.cpp`, `ExtendedGaussianViewer`, `RenderingSystem`, `GaussianView`는 건드리지 않는다.
 - 실제 HTTP / MJPEG / WebSocket 구현은 포함하지 않는다.
 - 후속 브랜치가 바로 참조 가능한 기준 문서와 샘플만 추가한다.
+### 0.2 Windows portable bundle 후속 수정 기록
+
+이번 세션에서는 Windows portable bundle 관련 리뷰 문서와 후속 계획 문서를 기준으로, 실제 bundle 생성/검증 스크립트와 install 책임 경계를 정리했다.
+
+기준 문서는 다음 두 개였다.
+
+- `docs/extended_gaussian_windows_portable_bundle_review_ko.md`
+- `plan/2026-04-08-windows-portable-bundle-review-followups.md`
+
+핵심 수정 사항은 다음과 같다.
+
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - 기본 `BuildRoot`를 `build/`로 변경했다.
+  - single-config build tree를 명시적으로 넘겼을 때 `CMAKE_BUILD_TYPE`와 `-Config`가 다르면 즉시 실패하도록 했다.
+  - package 단계에 요청 `Config`를 명시적으로 전달하도록 바꿨다.
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/CMakeLists.txt`
+  - Windows portable runtime 포함 책임을 package 단계가 아니라 install 단계로 이동시켰다.
+  - `CUDA::cudart`와 `xatlas` runtime artifact를 install 시점에 직접 포함하도록 정리했다.
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - `install/`을 수정하지 않고 bundle 복사 + preflight만 수행하도록 유지했다.
+  - 요청 `Config`에 맞는 viewer executable만 선택하도록 config-aware packaging 로직을 추가했다.
+  - 번들 루트에 `selected_viewer_exe.txt`를 기록해, 번들 실행 시 선택된 executable을 다시 사용할 수 있게 했다.
+- `tools/windows/check_windows_runtime.ps1`
+  - 사용자가 직접 넘긴 `-ManifestPath`가 없거나 형식이 잘못되면 `exit 3`으로 실패하도록 강화했다.
+  - 선택된 viewer executable suffix에 맞춰 `_d` / `_rwdi` runtime DLL을 구분해서 검사하도록 바꿨다.
+  - `xatlas*.dll`도 runtime 필수 항목으로 추가했다.
+  - 현재 exit code 의미는 아래처럼 유지된다.
+    - `0`: 통과
+    - `1`: runtime 또는 GPU 문제
+    - `2`: manifest가 가리키는 asset data root 누락
+    - `3`: manifest 경로 또는 manifest 형식 문제
+- `tools/windows/run_portable_bundle.cmd`
+  - 번들 생성 시 기록된 `selected_viewer_exe.txt`를 먼저 읽고, 그 executable을 우선 실행하도록 수정했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - install 단계가 runtime DLL 포함의 단일 진실 원천이고, package 단계는 번들링 및 preflight만 수행한다는 점을 반영해 문서를 갱신했다.
+  - `package_windows_portable_bundle.ps1 -Config ...` 사용 예시와 `selected_viewer_exe.txt` 동작도 추가로 기록했다.
+
+이번 수정으로 해결한 문제는 다음과 같다.
+
+- `build-ninja`처럼 single-config `Debug` build tree를 명시적으로 허용해도, stale `*_rwdi.exe`가 bundle에 들어가던 문제
+- preflight가 `xatlas` 누락을 잡지 못하던 문제
+- package 단계가 runtime 포함 책임까지 가져가면서 `install/`을 수정하던 설계 혼선
+- bundle launcher가 실제 bundle 생성 시 선택된 config와 다른 executable을 집을 수 있던 문제
+
+검증은 아래 항목까지 완료했다.
+
+- 기본 인자 `tools/windows/build_windows_portable_bundle.ps1` 실행
+  - `build/`를 사용해 `RelWithDebInfo` build -> install -> package -> runtime-only preflight가 통과했다.
+  - bundle은 `extended_gaussianViewer_app_rwdi.exe`를 선택했다.
+- `tools/windows/build_windows_portable_bundle.ps1 -BuildRoot .\build-ninja -Config Debug` 실행
+  - single-config `Debug` build tree 기준으로 build -> install -> package -> runtime-only preflight가 통과했다.
+  - bundle은 `extended_gaussianViewer_app_d.exe`를 선택했다.
+- `tools/windows/check_windows_runtime.ps1`
+  - 없는 manifest 경로는 `exit 3`
+  - asset data root가 없는 manifest는 `exit 2`
+  - `xatlas_rwdi.dll`을 제거한 임시 install 복사본은 `exit 1`
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - package 실행 전후 `install/bin` 스냅샷을 비교해, package 단계가 `install/`을 수정하지 않는 것을 확인했다.
+  - bundle root의 `selected_viewer_exe.txt`가 실제 선택된 executable 이름을 기록하는 것도 확인했다.
+
+이번 변경은 아래 두 커밋으로 남겼다.
+
+- `395a399` `fix: tighten windows portable bundle packaging`
+- `8777379` `docs: update windows portable bundle guide`
+
+남겨 둔 주의 사항은 다음과 같다.
+
+- 이번 세션에서는 `Debug`와 `RelWithDebInfo` 경로를 실제로 검증했다.
+- `Release` / `MinSizeRel`은 executable 선택 매핑은 넣었지만, end-to-end 실행 검증은 아직 하지 않았다.
+- GUI viewer를 실제로 장시간 띄워 조작하는 수동 시나리오까지는 다시 수행하지 않았고, 이번 범위의 검증은 build/install/package/preflight 중심이다.
+
+### 0.3 Windows portable bundle 리뷰 후속 2차 수정 기록
+
+직전 portable bundle 정리 이후 추가 리뷰에서, package 단계의 GPU 의존성과 `MinSizeRel` executable naming 불일치가 새로 지적됐다.
+
+이번 세션에서는 아래 두 문제를 먼저 문서로 정리한 뒤, 스크립트와 가이드를 같은 기준으로 수정했다.
+
+- `docs/extended_gaussian_windows_portable_bundle_review_finding_response_ko.md`
+
+핵심 수정 사항은 다음과 같다.
+
+- `tools/windows/check_windows_runtime.ps1`
+  - `-SkipGpuCheck` 옵션을 추가했다.
+  - 기본 동작은 그대로 유지해, 사용자가 직접 preflight를 실행할 때는 계속 NVIDIA GPU를 검사한다.
+  - package 단계처럼 artifact completeness만 보고 싶은 경우에만 GPU 검사를 명시적으로 건너뛸 수 있게 했다.
+  - viewer executable 탐색 목록과 runtime suffix 판별에 `*_msr.exe` / `_msr`를 추가했다.
+  - bundle 루트에 `selected_viewer_exe.txt`가 있으면, 수동 preflight도 그 executable을 우선 검사하도록 맞췄다.
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - package-time preflight를 호출할 때 항상 `-SkipGpuCheck`를 넘기도록 바꿨다.
+  - 따라서 GPU 없는 CI나 packaging host에서도 bundle 조립 자체는 가능해졌다.
+  - `MinSizeRel` config를 `extended_gaussianViewer_app_msr.exe`로 올바르게 매핑했다.
+  - executable fallback 후보 목록에도 `_msr`를 포함했다.
+- `tools/windows/run_portable_bundle.cmd`
+  - `selected_viewer_exe.txt`가 없을 때의 fallback 후보에 `extended_gaussianViewer_app_msr.exe`를 추가했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - package-time preflight는 GPU 검사를 건너뛴다는 점을 명시했다.
+  - 최종 실행 대상 PC에서는 기본 preflight로 GPU까지 검증해야 한다는 점을 추가했다.
+  - config별 viewer executable naming contract에 `MinSizeRel -> _msr`를 반영했다.
+
+이번 수정으로 해결한 문제는 다음과 같다.
+
+- GPU 없는 Windows 호스트에서 bundle 조립만 하려 해도 package가 실패하던 문제
+- `-Config MinSizeRel` 사용 시 실제 `*_msr` 산출물 대신 release executable을 잘못 고를 수 있던 문제
+- checker, package, launcher가 서로 다른 executable naming contract를 쓰던 문제
+
+이번 범위에서 수행한 검증은 아래와 같다.
+
+- `tools/windows/check_windows_runtime.ps1 -AppRoot .\install -SkipDataCheck`
+  - 기존과 동일하게 통과하는지 확인
+- `tools/windows/check_windows_runtime.ps1 -AppRoot .\install -SkipDataCheck -SkipGpuCheck`
+  - GPU 검사 opt-out 경로가 통과하는지 확인
+- `tools/windows/package_windows_portable_bundle.ps1 -Config RelWithDebInfo`
+  - bundle 생성과 package-time preflight가 통과하는지 확인
+
+남겨 둔 주의 사항은 다음과 같다.
+
+- 이번 세션에서도 실제 end-to-end 수동 실행 검증은 `RelWithDebInfo` 기준 위주로 확인했다.
+- `MinSizeRel` naming contract는 checker/package/launcher에서 바로잡았지만, 실제 `MinSizeRel` build 산출물로 end-to-end 실행까지 다시 검증한 것은 아니다.
 
 ## 1. 목적
 

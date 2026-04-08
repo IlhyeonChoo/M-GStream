@@ -6,6 +6,7 @@
 #include <core/system/CommandLineArgs.hpp>
 
 #include <algorithm>
+#include <cuda_runtime.h>
 #include <iomanip>
 #include <sstream>
 
@@ -568,7 +569,8 @@ namespace sibr {
 				ImGui::EndPopup();
 			}
 
-			if (ImGui::BeginChild("OutlinerList", ImVec2(0, 250), true)) {
+			const bool outlinerOpen = ImGui::BeginChild("OutlinerList", ImVec2(0, 250), true);
+			if (outlinerOpen) {
 				auto& allInstances = _scene->getInstances();
 				for (auto& pair : allInstances) {
 					GaussianInstance* inst = pair.second.get();
@@ -577,8 +579,8 @@ namespace sibr {
 						_selectedInstance = inst;
 					}
 				}
-				ImGui::EndChild();
 			}
+			ImGui::EndChild();
 
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -683,8 +685,25 @@ namespace sibr {
 
 			ImGui::TextWrapped("Manifest: %s", _loadedManifestPath.empty() ? "(none)" : _loadedManifestPath.c_str());
 			ImGui::Text("CPU Resident: %s MB", formatMegabytes(_resourceManager->totalCpuBytes()).c_str());
-			ImGui::Text("GPU Resident: %s MB", formatMegabytes(GPUResourceManager::getInstance().totalBytes()).c_str());
 			const RenderingSystem* renderingSystem = getRenderingSystem();
+			ImGui::TextUnformatted("VRAM (partial accounting):");
+			ImGui::Text("  GPU Assets:       %s MB", formatMegabytes(GPUResourceManager::getInstance().totalBytes()).c_str());
+			if (renderingSystem) {
+				if (const auto* view = renderingSystem->getView("Gaussian View")) {
+					ImGui::Text("  World buffers:    %s MB", formatMegabytes(view->worldBufferBytes()).c_str());
+					ImGui::Text("  Scratch (rast):   %s MB", formatMegabytes(view->scratchBufferBytes()).c_str());
+					ImGui::Text("  Output+Interop:   %s MB", formatMegabytes(view->outputInteropBytes()).c_str());
+				}
+			}
+			{
+				size_t freeB = 0, totalB = 0;
+				if (cudaMemGetInfo(&freeB, &totalB) == cudaSuccess) {
+					ImGui::Text("  CUDA allocatable used (device): %s / %s MB",
+						formatMegabytes(totalB - freeB).c_str(),
+						formatMegabytes(totalB).c_str());
+				}
+			}
+			ImGui::TextDisabled("* excludes CUDA runtime/context, cuBLAS/cuDNN, driver overhead");
 			const SwapManager::Stats* stats = renderingSystem ? renderingSystem->getSwapStats() : nullptr;
 			if (stats) {
 				ImGui::Text("Phase: %s", stats->current_phase.empty() ? "(none)" : stats->current_phase.c_str());
@@ -706,7 +725,8 @@ namespace sibr {
 			float panelWidth = ImGui::GetContentRegionAvail().x;
 			int columnCount = std::max(1, (int)(panelWidth / (tileWidth + padding)));
 
-			if (ImGui::BeginChild("AssetGrid")) {
+			const bool assetGridOpen = ImGui::BeginChild("AssetGrid");
+			if (assetGridOpen) {
 				const auto allAssets = _resourceManager->snapshotAssets();
 				int n = 0;
 				std::string fieldPendingDelete;
@@ -765,9 +785,8 @@ namespace sibr {
 						}
 					}
 				}
-
-				ImGui::EndChild();
 			}
+			ImGui::EndChild();
 		}
 		ImGui::End();
 	}

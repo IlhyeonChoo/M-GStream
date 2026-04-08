@@ -209,7 +209,7 @@ main
 1. `type = RENDERING_SYSTEM`
 2. CUDA device 개수 확인
 3. device 0 선택
-4. compute capability 7.0 이상인지 검사
+4. portable bundle 기준으로 compute capability 7.5 이상인지 검사
 
 즉 프로그램 시작 시점에 **CUDA 실행 가능 환경 검증**을 먼저 한다.
 

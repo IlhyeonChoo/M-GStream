@@ -3,8 +3,8 @@ project(${CNU_PROJECT} LANGUAGES CXX CUDA)
 
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 set(EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES
-    "86-real;89-real;90-real;120"
-    CACHE STRING "CUDA architectures for extended_gaussian and bundled CudaRasterizer builds."
+    "75-real;86-real;89-real;120"
+    CACHE STRING "CUDA architectures for extended_gaussian and bundled CudaRasterizer builds. Covers Turing (SM 7.5) through Blackwell (SM 12.0)."
 )
 set(EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES "${EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES}")
 

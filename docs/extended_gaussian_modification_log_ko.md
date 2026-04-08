@@ -6,6 +6,21 @@
 
 ## 0. 2026-04-08 후속 메모
 
+### 0.5 Portable bundle Turing+ 지원 범위 정합화
+
+Windows portable bundle의 CUDA 지원 범위를 빌드, 패키징 검증, 런타임 가드, 사용자 문서에서 동일하게 맞췄다.
+
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+  - portable bundle 기본 CUDA 아키텍처를 `75-real;86-real;89-real;120`으로 조정했다.
+  - 따라서 기본 지원 범위는 Turing(SM 7.5)부터 Blackwell(SM 12.0)까지다.
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - portable bundle 검증 목록도 `75`, `86`, `89`, `120`으로 맞췄다.
+  - 누락 시 재configure 예시도 같은 값으로 안내한다.
+- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.cpp`
+  - 런타임 가드를 `SM 7.5+` 기준으로 바꾸고, 구형 GPU에서는 첫 커널 디스패치까지 가지 않도록 명확한 에러 메시지로 조기 종료하게 했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - direct build 예시, bundle 검증 설명, 재configure 힌트, 지원 GPU 범위를 모두 같은 기준으로 갱신했다.
+
 ### 0.4 Windows portable CUDA 아키텍처 고정
 
 다른 Windows PC에서 portable bundle을 실행했을 때 `no kernel image is available for execution on the device`가 보고됐다.

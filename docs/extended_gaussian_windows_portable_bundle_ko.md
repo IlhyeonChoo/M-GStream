@@ -94,10 +94,13 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 
 이 스크립트는 순서대로 아래를 수행한다.
 
+- 기본 build tree로 `build/`를 사용
+- single-config build tree를 명시적으로 넘겼을 때 `CMAKE_BUILD_TYPE`와 `-Config`가 다르면 즉시 실패
 - `extended_gaussianViewer_app` 빌드
 - `extended_gaussianViewer_app_install` 실행
-- 설치 결과에 빠지기 쉬운 런타임(`cudart64_*.dll`, `xatlas*.dll`) 보강
 - Windows portable bundle 생성
+- 번들에 대해 runtime preflight 실행
+- sample manifest와 sample data가 같이 있으면 full preflight 추가 실행
 - 필요 시 zip 생성
 
 sample data까지 함께 묶어 바로 실행 가능한 번들을 만들고 싶으면:
@@ -120,6 +123,15 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 
 - `build\windows-portable-bundle\extended_gaussian-windows-portable`
 
+특정 build config 산출물만 번들에 넣고 싶으면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portable_bundle.ps1 -Config Debug
+```
+
+지원하는 config 값은 `Debug`, `RelWithDebInfo`, `Release`, `MinSizeRel` 이다.
+이 값을 주면 package 단계는 해당 config에 맞는 viewer executable만 선택하고, 기본적으로 다른 config executable로 fallback 하지 않는다.
+
 zip까지 같이 만들려면:
 
 ```powershell
@@ -139,18 +151,20 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 - 이 문서 사본
 - runtime preflight 스크립트
 - 번들 루트 실행 스크립트
+- 선택된 viewer executable 이름을 기록한 `selected_viewer_exe.txt`
 - `swaptest/README.txt` 또는 실제 `swaptest/` 데이터
 
-또한 아래 런타임을 설치 결과에 보강한다.
+이 스크립트는 `install/`을 수정하지 않는다.
+즉 runtime DLL 포함 책임은 package 단계가 아니라 `extended_gaussianViewer_app_install` 단계에 있다.
 
-- CUDA runtime: `cudart64_*.dll`
-- xatlas runtime: `xatlas*.dll`
+package 단계는 이미 만들어진 `install/`을 복사하고, 번들 완성도를 확인하는 preflight를 수행한다.
 
 `cmake --install` 이후에는 아래도 같이 설치된다.
 
 - `install/scripts/extended_gaussian/run_installed_viewer.cmd`
 - `install/scripts/extended_gaussian/check_windows_runtime.ps1`
 - `install/docs/extended_gaussian_windows_portable_bundle_ko.md`
+- `install/bin` 아래 viewer 실행에 필요한 runtime DLL
 
 ## 6. 번들 전달 후 다른 PC에서 실행하는 방법
 
@@ -159,6 +173,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 ```cmd
 run_extended_gaussian_viewer.cmd
 ```
+
+이 런처는 번들 생성 시 기록된 `selected_viewer_exe.txt`를 먼저 읽고, 그 executable을 우선 실행한다.
 
 manifest를 지정하려면:
 

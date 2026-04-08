@@ -248,7 +248,7 @@ main
 
 - `Subsystem.hpp`에는 공통 인터페이스만 있다.
 - `ArchiveSystem.*`, `UISystem.*`는 현재 비어 있다.
-- enum에 `ATCHIVE_SYSTEM` 오타도 있다.
+- 현재 enum 이름은 `ARCHIVE_SYSTEM` 이고, 오래된 문서나 과거 커밋에는 이전 표기가 남아 있을 수 있다.
 
 따라서 현재 구조는 **서브시스템 확장을 염두에 두었지만, 실제 동작은 RenderingSystem 중심으로만 구현된 상태**다.
 
@@ -382,7 +382,7 @@ ExtendedGaussianViewer::onShowResourceBrowser
 ```text
 ExtendedGaussianViewer::onShowScenePanel
  -> GaussianScene::createInstance(...)
- -> RenderingSystem::onInstaceCreated(...)
+ -> RenderingSystem::onInstanceCreated(...)
  -> RenderGaussianScene::createInstance(...)
  -> RenderGaussianInstance 생성
  -> RenderingSystem::syncRenderInstanceAsset(...)

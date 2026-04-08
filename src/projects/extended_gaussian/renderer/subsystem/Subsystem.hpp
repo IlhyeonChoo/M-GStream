@@ -6,7 +6,7 @@
 namespace sibr {
 	enum SubsystemType {
 		RENDERING_SYSTEM = 0,
-		ATCHIVE_SYSTEM = 1,
+		ARCHIVE_SYSTEM = 1,
 		UI_SYSTEM = 2,
 		SUBSYSTEM_LAST
 	};
@@ -22,9 +22,9 @@ namespace sibr {
 
 		virtual void onSystemRemoved(ExtendedGaussianViewer& owner) = 0;
 
-		virtual void onInstaceCreated(GaussianInstance& instance) {}
+		virtual void onInstanceCreated(GaussianInstance& instance) {}
 
-		virtual void onInstaceUpdated(GaussianInstance& instance) {}
+		virtual void onInstanceUpdated(GaussianInstance& instance) {}
 
 		virtual void onInstanceRemoved(GaussianInstance& instance) {}
 

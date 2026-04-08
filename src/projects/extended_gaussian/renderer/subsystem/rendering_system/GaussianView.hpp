@@ -14,6 +14,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <functional>
+#include <vector>
 
 namespace CudaRasterizer
 {
@@ -38,9 +39,15 @@ namespace sibr {
 
 		void onGUI() override;
 		size_t lastSkippedInstances() const;
+		void releaseTransientBuffers();
+		size_t worldBufferBytes() const;
+		size_t scratchBufferBytes() const;
+		size_t outputInteropBytes() const;
 
 	private:
 		bool resizeWorldBuffersIfNeeded(size_t count);
+		void releaseScratchBuffers();
+		void releaseWorldBuffers();
 		void AppendGaussianToWorld(
 			const GPUGaussianField* source,
 			size_t offset,

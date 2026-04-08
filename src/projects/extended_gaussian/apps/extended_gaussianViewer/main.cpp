@@ -9,6 +9,7 @@
 #include <core/raycaster/Raycaster.hpp>
 #include <core/view/SceneDebugView.hpp>
 #include <algorithm>
+#include <cstdlib>
 #include <boost/filesystem.hpp>
 #include <regex>
 #include <imgui/imgui_internal.h>
@@ -17,6 +18,12 @@ using namespace sibr;
 
 int main(int ac, char** av)
 {
+#ifdef _WIN32
+	_putenv_s("CUDA_MODULE_LOADING", "LAZY");
+#else
+	setenv("CUDA_MODULE_LOADING", "LAZY", 1);
+#endif
+
 	CommandLineArgs::parseMainArgs(ac, av);
 	BasicIBRAppArgs myArgs;
 

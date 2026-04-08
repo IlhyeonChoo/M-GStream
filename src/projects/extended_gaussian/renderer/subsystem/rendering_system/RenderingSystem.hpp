@@ -27,9 +27,9 @@ namespace sibr
 
 		void onSystemRemoved(ExtendedGaussianViewer& owner) override;
 
-		void onInstaceCreated(GaussianInstance& instance) override;
+		void onInstanceCreated(GaussianInstance& instance) override;
 
-		void onInstaceUpdated(GaussianInstance& instance) override;
+		void onInstanceUpdated(GaussianInstance& instance) override;
 
 		void onInstanceRemoved(GaussianInstance& instance) override;
 

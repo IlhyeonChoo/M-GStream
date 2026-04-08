@@ -68,7 +68,7 @@ namespace sibr {
 	{
 	}
 
-	void RenderingSystem::onInstaceCreated(GaussianInstance& instance)
+	void RenderingSystem::onInstanceCreated(GaussianInstance& instance)
 	{
 		scene->createInstance(&instance);
 		if (RenderGaussianInstance* renderInstance = scene->getInstance(&instance)) {
@@ -76,7 +76,7 @@ namespace sibr {
 		}
 	}
 
-	void RenderingSystem::onInstaceUpdated(GaussianInstance& instance)
+	void RenderingSystem::onInstanceUpdated(GaussianInstance& instance)
 	{
 		if (RenderGaussianInstance* render_instance = scene->getInstance(&instance)) {
 			syncRenderInstanceAsset(*render_instance, instance);

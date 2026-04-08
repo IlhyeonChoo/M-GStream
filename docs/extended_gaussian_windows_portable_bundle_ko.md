@@ -100,6 +100,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 - `extended_gaussianViewer_app_install` 실행
 - Windows portable bundle 생성
 - 번들에 대해 runtime preflight 실행
+- package 단계에서 수행되는 preflight는 artifact completeness만 확인하고, NVIDIA GPU 검사는 건너뜀
 - sample manifest와 sample data가 같이 있으면 full preflight 추가 실행
 - 필요 시 zip 생성
 
@@ -173,6 +174,13 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 지원하는 config 값은 `Debug`, `RelWithDebInfo`, `Release`, `MinSizeRel` 이다.
 이 값을 주면 package 단계는 해당 config에 맞는 viewer executable만 선택하고, 기본적으로 다른 config executable로 fallback 하지 않는다.
 
+실제 viewer executable postfix 규칙은 아래와 같다.
+
+- `Debug` -> `extended_gaussianViewer_app_d.exe`
+- `RelWithDebInfo` -> `extended_gaussianViewer_app_rwdi.exe`
+- `Release` -> `extended_gaussianViewer_app.exe`
+- `MinSizeRel` -> `extended_gaussianViewer_app_msr.exe`
+
 zip까지 같이 만들려면:
 
 ```powershell
@@ -199,6 +207,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\package_windows_portabl
 즉 runtime DLL 포함 책임은 package 단계가 아니라 `extended_gaussianViewer_app_install` 단계에 있다.
 
 package 단계는 이미 만들어진 `install/`을 복사하고, 번들 완성도를 확인하는 preflight를 수행한다.
+이때 package-time preflight는 `-SkipGpuCheck`로 실행되므로, bundle을 조립하는 호스트에 NVIDIA GPU가 없어도 packaging 자체는 가능하다.
+반대로 최종 실행 대상 PC에서는 아래 수동 preflight를 기본 인자 그대로 다시 실행해 GPU까지 포함한 최종 검증을 하는 편이 맞다.
 
 `cmake --install` 이후에는 아래도 같이 설치된다.
 
@@ -216,6 +226,7 @@ run_extended_gaussian_viewer.cmd
 ```
 
 이 런처는 번들 생성 시 기록된 `selected_viewer_exe.txt`를 먼저 읽고, 그 executable을 우선 실행한다.
+같은 번들 루트에서 `check_windows_runtime.ps1`를 실행할 때도, `selected_viewer_exe.txt`가 있으면 같은 executable을 우선 검사한다.
 
 manifest를 지정하려면:
 
@@ -232,6 +243,13 @@ run_extended_gaussian_viewer.cmd --manifest ".\manifests\mc_small_aerial_c36_nei
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\check_windows_runtime.ps1 -AppRoot ".\install"
+```
+
+이 기본 호출은 runtime DLL뿐 아니라 NVIDIA GPU 존재도 같이 확인한다.
+만약 packaging host처럼 GPU 없는 PC에서 artifact completeness만 먼저 보고 싶다면 아래처럼 `-SkipGpuCheck`를 붙일 수 있다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\check_windows_runtime.ps1 -AppRoot ".\install" -SkipGpuCheck
 ```
 
 반대로 현재 개발 PC의 **저장소 루트**에서 install tree만 바로 검사하고 싶다면:

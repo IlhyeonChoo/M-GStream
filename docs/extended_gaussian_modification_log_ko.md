@@ -105,6 +105,54 @@
 - `Release` / `MinSizeRel`은 executable 선택 매핑은 넣었지만, end-to-end 실행 검증은 아직 하지 않았다.
 - GUI viewer를 실제로 장시간 띄워 조작하는 수동 시나리오까지는 다시 수행하지 않았고, 이번 범위의 검증은 build/install/package/preflight 중심이다.
 
+### 0.3 Windows portable bundle 리뷰 후속 2차 수정 기록
+
+직전 portable bundle 정리 이후 추가 리뷰에서, package 단계의 GPU 의존성과 `MinSizeRel` executable naming 불일치가 새로 지적됐다.
+
+이번 세션에서는 아래 두 문제를 먼저 문서로 정리한 뒤, 스크립트와 가이드를 같은 기준으로 수정했다.
+
+- `docs/extended_gaussian_windows_portable_bundle_review_finding_response_ko.md`
+
+핵심 수정 사항은 다음과 같다.
+
+- `tools/windows/check_windows_runtime.ps1`
+  - `-SkipGpuCheck` 옵션을 추가했다.
+  - 기본 동작은 그대로 유지해, 사용자가 직접 preflight를 실행할 때는 계속 NVIDIA GPU를 검사한다.
+  - package 단계처럼 artifact completeness만 보고 싶은 경우에만 GPU 검사를 명시적으로 건너뛸 수 있게 했다.
+  - viewer executable 탐색 목록과 runtime suffix 판별에 `*_msr.exe` / `_msr`를 추가했다.
+  - bundle 루트에 `selected_viewer_exe.txt`가 있으면, 수동 preflight도 그 executable을 우선 검사하도록 맞췄다.
+- `tools/windows/package_windows_portable_bundle.ps1`
+  - package-time preflight를 호출할 때 항상 `-SkipGpuCheck`를 넘기도록 바꿨다.
+  - 따라서 GPU 없는 CI나 packaging host에서도 bundle 조립 자체는 가능해졌다.
+  - `MinSizeRel` config를 `extended_gaussianViewer_app_msr.exe`로 올바르게 매핑했다.
+  - executable fallback 후보 목록에도 `_msr`를 포함했다.
+- `tools/windows/run_portable_bundle.cmd`
+  - `selected_viewer_exe.txt`가 없을 때의 fallback 후보에 `extended_gaussianViewer_app_msr.exe`를 추가했다.
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - package-time preflight는 GPU 검사를 건너뛴다는 점을 명시했다.
+  - 최종 실행 대상 PC에서는 기본 preflight로 GPU까지 검증해야 한다는 점을 추가했다.
+  - config별 viewer executable naming contract에 `MinSizeRel -> _msr`를 반영했다.
+
+이번 수정으로 해결한 문제는 다음과 같다.
+
+- GPU 없는 Windows 호스트에서 bundle 조립만 하려 해도 package가 실패하던 문제
+- `-Config MinSizeRel` 사용 시 실제 `*_msr` 산출물 대신 release executable을 잘못 고를 수 있던 문제
+- checker, package, launcher가 서로 다른 executable naming contract를 쓰던 문제
+
+이번 범위에서 수행한 검증은 아래와 같다.
+
+- `tools/windows/check_windows_runtime.ps1 -AppRoot .\install -SkipDataCheck`
+  - 기존과 동일하게 통과하는지 확인
+- `tools/windows/check_windows_runtime.ps1 -AppRoot .\install -SkipDataCheck -SkipGpuCheck`
+  - GPU 검사 opt-out 경로가 통과하는지 확인
+- `tools/windows/package_windows_portable_bundle.ps1 -Config RelWithDebInfo`
+  - bundle 생성과 package-time preflight가 통과하는지 확인
+
+남겨 둔 주의 사항은 다음과 같다.
+
+- 이번 세션에서도 실제 end-to-end 수동 실행 검증은 `RelWithDebInfo` 기준 위주로 확인했다.
+- `MinSizeRel` naming contract는 checker/package/launcher에서 바로잡았지만, 실제 `MinSizeRel` build 산출물로 end-to-end 실행까지 다시 검증한 것은 아니다.
+
 ## 1. 목적
 
 이번 작업의 목적은 두 가지였다.

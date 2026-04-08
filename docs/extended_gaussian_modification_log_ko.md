@@ -6,6 +6,32 @@
 
 ## 0. 2026-04-08 후속 메모
 
+### 0.4 Windows portable CUDA 아키텍처 고정
+
+다른 Windows PC에서 portable bundle을 실행했을 때 `no kernel image is available for execution on the device`가 보고됐다.
+
+이번 확인에서 핵심 원인은 build tree cache에 남아 있던 `CMAKE_CUDA_ARCHITECTURES=52`였다.
+이 값으로 build된 CUDA 바이너리는 최신 GeForce RTX 50 계열 같은 새 GPU까지 고려한 portable bundle 기준으로는 너무 좁다.
+
+이번 후속 수정은 아래 두 군데에 적용했다.
+
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+  - 프로젝트 전용 cache 변수 `EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES`를 추가했다.
+  - 기본값을 `86-real;89-real;90-real;120`으로 두고, `extended_gaussian` 본체와 `CudaRasterizer` 둘 다 이 값을 명시적으로 사용하도록 고정했다.
+  - 따라서 generator별 `native` 해석이나 과거 cache 값에 덜 의존하게 됐다.
+- `tools/windows/build_windows_portable_bundle.ps1`
+  - viewer build 직후 build tree cache를 다시 읽어, portable bundle용 CUDA 아키텍처가 `86`, `89`, `90`, `120`을 모두 포함하는지 확인하도록 했다.
+  - 누락 시 install/package 전에 즉시 실패시키고, 재configure 인자를 에러 메시지에 같이 출력하도록 했다.
+
+관련 문서도 함께 업데이트했다.
+
+- `docs/extended_gaussian_windows_portable_bundle_ko.md`
+  - 새 Windows PC direct build 예시에 `-DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=86-real;89-real;90-real;120`를 명시했다.
+  - portable bundle 스크립트가 build 직후 CUDA 아키텍처를 검증한다는 점을 추가했다.
+
+이번 수정은 아직 end-to-end CUDA rebuild까지 여기서 다시 돌리지는 않았다.
+이유는 현재 저장소 규칙상 기존 build tree를 재사용하는 편을 우선했고, 실제 효과 검증에는 한 번의 reconfigure + rebuild가 필요하기 때문이다.
+
 ### 0.1 `develop/phase1-manifest-swap -> main` 머지 전 known issue
 
 `develop/phase1-manifest-swap` 브랜치는 Phase 1 manifest / swap 구현과 후속 정리 커밋들을 포함한 상태이며, `main` 머지 후보로 취급하고 있다.  

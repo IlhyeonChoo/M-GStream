@@ -27,7 +27,7 @@
 - NVIDIA 드라이버 설치 완료
 - Visual Studio 2022 C++ 워크로드
 - CMake
-- CUDA Toolkit
+- CUDA Toolkit 12.8 이상
 - Python
 
 권장 빌드 구성은 `RelWithDebInfo`다.
@@ -45,7 +45,7 @@
 저장소 루트에서 다음 순서로 진행한다.
 
 ```powershell
-cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake -S . -B build-portable -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo'
+cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake -S . -B build-portable -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=86-real;89-real;90-real;120'
 ```
 
 ```powershell
@@ -58,6 +58,8 @@ cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Commo
 
 `cmake --install build-portable` 로 전체 설치를 시도하면, 현재 viewer에 직접 필요하지 않은 다른 타깃이 아직 안 빌드된 경우 실패할 수 있다.  
 Windows에서는 `extended_gaussianViewer_app_install` 타깃을 표준 설치 경로로 사용하는 것을 권장한다.
+
+`RTX 50` 계열을 포함한 다른 Windows PC로 실행 파일을 옮길 계획이면, configure 시 CUDA 아키텍처를 최소 `86-real;89-real;90-real;120`으로 잡는 것을 기본값으로 유지하는 편이 안전하다.
 
 설치 후 기본 실행은 아래 셋 중 하나로 한다.
 
@@ -97,6 +99,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 - 기본 build tree로 `build/`를 사용
 - single-config build tree를 명시적으로 넘겼을 때 `CMAKE_BUILD_TYPE`와 `-Config`가 다르면 즉시 실패
 - `extended_gaussianViewer_app` 빌드
+- 빌드 직후 build tree의 CUDA 아키텍처가 `86-real;89-real;90-real;120` 범위를 포함하는지 검증
 - `extended_gaussianViewer_app_install` 실행
 - Windows portable bundle 생성
 - 번들에 대해 runtime preflight 실행
@@ -111,6 +114,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 ```
 
 `-IncludeSwaptestData`는 로컬 `swaptest/`를 번들 안에 같이 복사한다.
+
+기존 build tree가 예전에 `CMAKE_CUDA_ARCHITECTURES=52` 같은 값으로 configure되어 있었다면, 이 스크립트는 install/package 전에 중단된다. 이 경우 한 번 다시 configure해서 `EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=86-real;89-real;90-real;120`을 cache에 반영한 뒤 재실행한다.
 
 ### 4.1 가장 짧은 배포 실험 절차
 

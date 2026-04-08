@@ -111,6 +111,47 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 
 `-IncludeSwaptestData`는 로컬 `swaptest/`를 번들 안에 같이 복사한다.
 
+### 4.1 가장 짧은 배포 실험 절차
+
+다른 Windows PC에서 portable bundle만 빠르게 검증하고 싶다면 아래 순서로 진행한다.
+
+현재 개발 PC의 **저장소 루트**에서:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_bundle.ps1 -ZipBundle
+```
+
+sample data까지 같이 넣어 다른 PC에서 바로 sample manifest 렌더링까지 보고 싶으면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_bundle.ps1 -ZipBundle -IncludeSwaptestData
+```
+
+이 명령이 끝나면 아래 zip이 생성된다.
+
+- `build\windows-portable-bundle\extended_gaussian-windows-portable.zip`
+
+그 다음 순서는 아래와 같다.
+
+1. 위 zip을 다른 Windows PC로 복사한다.
+2. 다른 PC에서 zip을 압축 해제한다.
+3. 압축을 푼 **번들 루트**에서 아래 preflight를 실행한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\check_windows_runtime.ps1 -AppRoot .\install
+```
+
+4. preflight가 통과하면 같은 **번들 루트**에서 아래 런처를 실행한다.
+
+```cmd
+run_extended_gaussian_viewer.cmd
+```
+
+중요:
+
+- 저장소 루트에서 preflight를 실행할 때는 `.\check_windows_runtime.ps1`가 아니라 `.\tools\windows\check_windows_runtime.ps1`를 사용해야 한다.
+- `.\check_windows_runtime.ps1`는 압축을 푼 **번들 루트**에서만 맞는 경로다.
+
 ## 5. 설치 번들만 생성
 
 현재 머신에서 설치 결과를 다른 Windows PC로 전달하려면 아래 스크립트를 사용한다.
@@ -191,6 +232,12 @@ run_extended_gaussian_viewer.cmd --manifest ".\manifests\mc_small_aerial_c36_nei
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\check_windows_runtime.ps1 -AppRoot ".\install"
+```
+
+반대로 현재 개발 PC의 **저장소 루트**에서 install tree만 바로 검사하고 싶다면:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\windows\check_windows_runtime.ps1 -AppRoot ".\install"
 ```
 
 ## 7. 데이터 배치 규칙

@@ -5,9 +5,13 @@
 # include "Config.hpp"
 #include <projects/extended_gaussian/renderer/scene/GaussianScene.hpp>
 #include <projects/extended_gaussian/renderer/subsystem/Subsystem.hpp>
+#include <projects/extended_gaussian/renderer/resource/ManifestStore.hpp>
 #include <projects/extended_gaussian/renderer/resource/ResourceManager.hpp>
+#include <projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.hpp>
 
 namespace sibr {
+	class RenderingSystem;
+
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT ExtendedGaussianViewer : public sibr::MultiViewBase
 	{
 	public:
@@ -43,9 +47,19 @@ namespace sibr {
 		Vector2i getWindowSize() const;
 
 		const GaussianScene* getScene() const;
+		GaussianScene* getScene();
+		ResourceManager* getResourceManager();
 		const ResourceManager* getResourceManager() const;
+		RenderingSystem* getRenderingSystem();
+		const RenderingSystem* getRenderingSystem() const;
 
 	private:
+		bool loadManifestFile(const std::string& path);
+		size_t createManifestInstances(bool onlyMissing = true);
+		void focusCameraOnManifest();
+		static const char* cpuStateLabel(CpuState state);
+		static const char* gpuStateLabel(GpuState state);
+		static std::string formatMegabytes(size_t bytes);
 
 		void onShowScenePanel(sibr::Window& win);
 		void onShowResourceBrowser(sibr::Window& win);
@@ -65,6 +79,11 @@ namespace sibr {
 		GaussianScene::UPtr _scene;
 		Subsystem::UPtr _subsystem[SubsystemType::SUBSYSTEM_LAST];
 		ResourceManager::UPtr _resourceManager;
+		ManifestStore _manifestStore;
+		std::string _loadedManifestPath;
+		std::string _currentPhase;
+		double _appTimeSec = 0.0;
+		uint64_t _frameIndex = 0;
 	};
 }
 

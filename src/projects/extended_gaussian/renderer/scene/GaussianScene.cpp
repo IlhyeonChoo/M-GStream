@@ -1,7 +1,7 @@
 #include "GaussianScene.hpp"
 
 namespace sibr {
-    GaussianInstance* GaussianScene::createInstance(const std::string& name, const std::string& assetId, Vector3f p_position, Vector3f p_eular_angle, float p_scale)
+    GaussianInstance* GaussianScene::createInstance(const std::string& name, const std::string& assetId, Vector3f p_position, Vector3f p_euler_angle, float p_scale)
     {
 
         if (instances.find(name) != instances.end()) {
@@ -9,7 +9,7 @@ namespace sibr {
             return nullptr;
         }
 
-        auto res = instances.emplace(name, std::make_unique<GaussianInstance>(name, assetId, p_position, p_eular_angle, p_scale));
+        auto res = instances.emplace(name, std::make_unique<GaussianInstance>(name, assetId, p_position, p_euler_angle, p_scale));
 
         return res.first->second.get();
     }

@@ -69,6 +69,10 @@ namespace sibr {
 	};
 
 	std::function<char* (size_t N)> resizeFunctional(void** ptr, size_t& S) {
+		// Returns a resize callback for a CUDA scratch buffer.
+		// Allocates 2x the requested size to amortise repeated growth.
+		// The caller (CudaRasterizer) owns the pointer via ptr; this closure
+		// captures ptr by pointer and S by reference so both remain live.
 		auto lambda = [ptr, &S](size_t N) {
 			if (N > S)
 			{
@@ -129,6 +133,7 @@ namespace sibr {
 		glClearNamedBufferData(imageBuffer, GL_RGB32F, GL_RGB, GL_FLOAT, background);
 
 		size_t totalCount = 0;
+		lastSkippedInstances_ = 0;
 		auto& gaussian_instances = owner->getScene()->getInstances();
 		for (auto& it : gaussian_instances) {
 			const auto* gpuField = it.second->getGPUField();
@@ -167,6 +172,9 @@ namespace sibr {
 			auto field = inst->getGPUField();
 			if (!field)
 			{
+				if (!inst->getAssetId().empty()) {
+					++lastSkippedInstances_;
+				}
 				continue;
 			}
 
@@ -174,7 +182,7 @@ namespace sibr {
 				field,
 				current_world_gausians_count,
 				inst->getOrigin()->getPosition(),
-				inst->getOrigin()->getEular(),
+				inst->getOrigin()->getEuler(),
 				inst->getOrigin()->getScale()
 			);
 		}
@@ -239,6 +247,11 @@ namespace sibr {
 
 	void GaussianView::onGUI() {}
 
+	size_t GaussianView::lastSkippedInstances() const
+	{
+		return lastSkippedInstances_;
+	}
+
 	GaussianView::~GaussianView()
 	{
 		// Cleanup
@@ -298,7 +311,7 @@ namespace sibr {
 
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_rect_cuda, max_gaussians_count * 2 * sizeof(int)));
 
-			std::cout << "[VRAM] Resized ALL World Buffers for " << max_gaussians_count << " gaussians." << std::endl;
+			SIBR_LOG << "[VRAM] Resized world buffers for " << max_gaussians_count << " gaussians." << std::endl;
 
 			return true;
 		}
@@ -309,7 +322,7 @@ namespace sibr {
 		const GPUGaussianField* source,
 		size_t offset,
 		const Vector3f& position,
-		const Vector3f& eular,
+		const Vector3f& euler,
 		float scale
 	) {
 		if (!source)
@@ -319,16 +332,15 @@ namespace sibr {
 
 		current_world_gausians_count += source->count;
 
-		TransformPosRotScaleSHsToWorld(
+		TransformPosRotScaleToWorld(
 			source,
 			offset,
 			position,
-			eular,
+			euler,
 			scale,
 			world_pos_cuda,
 			world_rot_cuda,
-			world_scale_cuda,
-			world_shs_cuda
+			world_scale_cuda
 		);
 
 		appendSHsToWorld(
@@ -345,20 +357,20 @@ namespace sibr {
 		);
 	}
 
-	void GaussianView::TransformPosRotScaleSHsToWorld(
+	void GaussianView::TransformPosRotScaleToWorld(
 		const GPUGaussianField* source,
 		size_t offset,
 		const Vector3f& position,
-		const Vector3f& eular,
+		const Vector3f& euler,
 		float scale,
-		float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr, float* w_shs_ptr
+		float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr
 	) {
 		const int count = source->count;
 		const float degToRad = 3.1415926535f / 180.0f;
 
-		Eigen::AngleAxisf roll(eular.x() * degToRad, Vector3f::UnitX());
-		Eigen::AngleAxisf pitch(eular.y() * degToRad, Vector3f::UnitY());
-		Eigen::AngleAxisf yaw(eular.z() * degToRad, Vector3f::UnitZ());
+		Eigen::AngleAxisf roll(euler.x() * degToRad, Vector3f::UnitX());
+		Eigen::AngleAxisf pitch(euler.y() * degToRad, Vector3f::UnitY());
+		Eigen::AngleAxisf yaw(euler.z() * degToRad, Vector3f::UnitZ());
 		Quaternionf q = roll * pitch * yaw;
 
 		Matrix4f worldMat = Matrix4f::Identity();

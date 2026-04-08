@@ -21,10 +21,12 @@ namespace sibr {
 
 		std::string asset_id;
 		int count;
-		float* pos_cuda;
-		float* rot_cuda;
-		float* scale_cuda;
-		float* opacity_cuda;
-		float* shs_cuda;
+		int sh_degree = 0;
+		size_t bytes = 0;
+		float* pos_cuda = nullptr;
+		float* rot_cuda = nullptr;
+		float* scale_cuda = nullptr;
+		float* opacity_cuda = nullptr;
+		float* shs_cuda = nullptr;
 	};
 }

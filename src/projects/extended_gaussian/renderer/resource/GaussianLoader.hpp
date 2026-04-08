@@ -4,12 +4,16 @@
 #include "Config.hpp"
 #include "GaussianField.hpp"
 
+#include <boost/filesystem.hpp>
+
 namespace sibr {
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianLoader {
 	public:
 		SIBR_CLASS_PTR(GaussianLoader);
 
 		static GaussianField::UPtr load(const std::string& modelPath);
+		static GaussianField::Ptr loadShared(const std::string& modelPath);
+		static GaussianField::Ptr loadFromModelDir(const boost::filesystem::path& modelPath);
 
 	private:
 		template<int D>
@@ -126,4 +130,18 @@ namespace sibr {
 
         return true;
     }
+
+	inline GaussianField::Ptr GaussianLoader::loadShared(const std::string& modelPath)
+	{
+		auto field = load(modelPath);
+		if (!field) {
+			return nullptr;
+		}
+		return GaussianField::Ptr(field.release());
+	}
+
+	inline GaussianField::Ptr GaussianLoader::loadFromModelDir(const boost::filesystem::path& modelPath)
+	{
+		return loadShared(modelPath.string());
+	}
 }

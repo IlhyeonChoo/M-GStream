@@ -2,7 +2,37 @@
 
 작성일: 2026-04-03
 
-> 주의: 본 문서는 2026-04-03 시점 스냅샷이다. 이후 변경은 반영되지 않을 수 있으며, 현재 상태 판단은 코드와 `AGENTS.md`를 우선한다.
+> 주의: 본 문서는 2026-04-03 시점 스냅샷에서 시작했으며, 아래에 후속 메모를 계속 덧붙인다. 현재 상태 판단은 코드와 `AGENTS.md`를 우선한다.
+
+## 0. 2026-04-08 후속 메모
+
+### 0.1 `develop/phase1-manifest-swap -> main` 머지 전 known issue
+
+`develop/phase1-manifest-swap` 브랜치는 Phase 1 manifest / swap 구현과 후속 정리 커밋들을 포함한 상태이며, `main` 머지 후보로 취급하고 있다.  
+다만 머지 시점에 아래 known issue를 반드시 함께 기록한다.
+
+- 증상
+  - viewer에서 카메라를 계속 이동하면 OOM이 발생할 수 있다.
+- 관측 로그 위치
+  - `src/projects/extended_gaussian/renderer/subsystem/rendering_system/GaussianView.cpp:81`
+- 관측 함수
+  - `sibr::resizeFunctional::<lambda>::operator()`
+- 실패 지점
+  - scratch buffer 재할당 경로의 `cudaMalloc(ptr, 2 * N)`
+
+해당 코드는 현재 다음 형태다.
+
+- `GaussianView.cpp:71`
+  - `resizeFunctional(void** ptr, size_t& S)`
+- `GaussianView.cpp:81`
+  - `CUDA_SAFE_CALL(cudaMalloc(ptr, 2 * N));`
+
+현재 판단은 다음과 같다.
+
+- 이 이슈는 `develop/phase1-manifest-swap`의 `main` 머지를 막는 블로커로 취급하지 않는다.
+- 대신 `main` 머지 시점의 **baseline known issue**로 남긴다.
+- 이후 Windows 이식성, Ubuntu 24.04 포팅, Ubuntu Server 원격 스트리밍 브랜치에서는 모두 이 이슈를 추적 대상으로 유지한다.
+- 특히 headless EGL 경로와 remote server mode에서도 장시간 카메라 이동 시 재현 여부를 별도로 다시 확인해야 한다.
 
 ## 1. 목적
 

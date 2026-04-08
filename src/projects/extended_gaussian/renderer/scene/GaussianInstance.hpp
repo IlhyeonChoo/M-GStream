@@ -13,7 +13,7 @@ namespace sibr {
 		SIBR_CLASS_PTR(GaussianInstance);
 
 		GaussianInstance(const std::string& p_name);
-		GaussianInstance(const std::string& p_name, const std::string& p_assetId, Vector3f p_position = Vector3f(), Vector3f p_eular_angle = Vector3f(), float p_scale = 1.f);
+		GaussianInstance(const std::string& p_name, const std::string& p_assetId, Vector3f p_position = Vector3f(), Vector3f p_euler_angle = Vector3f(), float p_scale = 1.f);
 
 		Matrix4f getTranslationMatrix() const;
 		Matrix4f getRotationMatrix() const;
@@ -30,8 +30,8 @@ namespace sibr {
 		const Vector3f& getPosition() const;
 		void setPosition(const Vector3f& p_position);
 
-		const Vector3f& getEular() const;
-		void setEular(const Vector3f& p_eular);
+		const Vector3f& getEuler() const;
+		void setEuler(const Vector3f& p_euler);
 
 		float getScale() const;
 		void setScale(float p_scale);
@@ -39,14 +39,14 @@ namespace sibr {
 		// GUI Helpers
 		std::string& getNameRef();
 		Vector3f& getPositionRef();
-		Vector3f& getEularRef();
+		Vector3f& getEulerRef();
 		float& getScaleRef();
 
 	private:
 		std::string name;
 		std::string assetId;
 		Vector3f position;
-		Vector3f eular_angle;
+		Vector3f euler_angle;
 		float scale = 1.f;
 	};
 }

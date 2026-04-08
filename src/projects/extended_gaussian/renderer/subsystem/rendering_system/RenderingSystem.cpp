@@ -1,7 +1,6 @@
 #include "RenderingSystem.hpp"
 
 #include "RenderUtils.hpp"
-#include "RenderingSystem.hpp"
 #include <projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp>
 
 namespace sibr {
@@ -31,6 +30,7 @@ namespace sibr {
 	void RenderingSystem::onSystemAdded(ExtendedGaussianViewer& owner)
 	{
 		resources = owner.getResourceManager();
+		swapManager = std::make_unique<SwapManager>(*resources, GPUResourceManager::getInstance());
 
 		// Create View
 		Vector2i winSize = owner.getWindowSize();
@@ -136,12 +136,64 @@ namespace sibr {
 	void RenderingSystem::syncRenderInstanceAsset(RenderGaussianInstance& renderInstance, const GaussianInstance& instance)
 	{
 		const std::string& assetId = instance.getAssetId();
-		const GaussianField* cpuField = nullptr;
-		if (resources && !assetId.empty()) {
-			cpuField = resources->getField(assetId);
+		renderInstance.setAssetId(assetId, nullptr);
+	}
+
+	void RenderingSystem::setManifest(const ManifestStore* manifest)
+	{
+		if (swapManager) {
+			swapManager->setManifest(manifest);
+		}
+	}
+
+	void RenderingSystem::ensureManualGpuResidency()
+	{
+		if (!resources || !scene) {
+			return;
 		}
 
-		renderInstance.setAssetId(assetId, cpuField);
+		GPUResourceManager& gpuManager = GPUResourceManager::getInstance();
+		for (const auto& instancePair : scene->getInstances()) {
+			const auto* renderInstance = instancePair.second.get();
+			if (!renderInstance) {
+				continue;
+			}
+
+			const std::string& assetId = renderInstance->getAssetId();
+			if (assetId.empty() || gpuManager.has(assetId)) {
+				continue;
+			}
+
+			const auto cpuField = resources->getCpuFieldShared(assetId);
+			if (cpuField) {
+				gpuManager.addField(assetId, cpuField.get());
+			}
+		}
+	}
+
+	void RenderingSystem::tickStreaming(const ViewerContext& context)
+	{
+		if (swapManager && swapManager->hasManifest()) {
+			if (const auto* gaussianView = getView("Gaussian View")) {
+				swapManager->setSkippedInstancesLastFrame(gaussianView->lastSkippedInstances());
+			}
+			swapManager->tick(context);
+			return;
+		}
+		ensureManualGpuResidency();
+	}
+
+	bool RenderingSystem::hasManifest() const
+	{
+		return swapManager && swapManager->hasManifest();
+	}
+
+	const SwapManager::Stats* RenderingSystem::getSwapStats() const
+	{
+		if (!swapManager) {
+			return nullptr;
+		}
+		return &swapManager->stats();
 	}
 
 	RenderingSystem::~RenderingSystem()

@@ -1,16 +1,16 @@
 #pragma once
 
-# include "Config.hpp"
-# include <core/renderer/RenderMaskHolder.hpp>
-# include <core/scene/BasicIBRScene.hpp>
-# include <core/system/SimpleTimer.hpp>
-# include <core/system/Config.hpp>
-# include <core/graphics/Mesh.hpp>
-# include <core/view/ViewBase.hpp>
-# include <core/renderer/CopyRenderer.hpp>
-# include <core/renderer/PointBasedRenderer.hpp>
-# include <memory>
-# include <core/graphics/Texture.hpp>
+#include "Config.hpp"
+#include <core/renderer/RenderMaskHolder.hpp>
+#include <core/scene/BasicIBRScene.hpp>
+#include <core/system/SimpleTimer.hpp>
+#include <core/system/Config.hpp>
+#include <core/graphics/Mesh.hpp>
+#include <core/view/ViewBase.hpp>
+#include <core/renderer/CopyRenderer.hpp>
+#include <core/renderer/PointBasedRenderer.hpp>
+#include <memory>
+#include <core/graphics/Texture.hpp>
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <functional>
@@ -37,6 +37,7 @@ namespace sibr {
 		void onRenderIBR(sibr::IRenderTarget& dst, const sibr::Camera& eye) override;
 
 		void onGUI() override;
+		size_t lastSkippedInstances() const;
 
 	private:
 		bool resizeWorldBuffersIfNeeded(size_t count);
@@ -44,16 +45,16 @@ namespace sibr {
 			const GPUGaussianField* source,
 			size_t offset,
 			const Vector3f& position,
-			const Vector3f& eular,
+			const Vector3f& euler,
 			float scale
 		);
-		void TransformPosRotScaleSHsToWorld(
+		void TransformPosRotScaleToWorld(
 			const GPUGaussianField* source,
 			size_t offset,
 			const Vector3f& position,
-			const Vector3f& eular,
+			const Vector3f& euler,
 			float scale,
-			float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr, float* w_shs_ptr
+			float* w_pos_ptr, float* w_rot_ptr, float* w_scale_ptr
 		);
 		void appendSHsToWorld(const float* src_shs, int count, int offset, int sh_degree);
 		void appendOpacitiesToWorld(const float* src_opacities, int count, int offset);
@@ -90,6 +91,7 @@ namespace sibr {
 		std::vector<char> fallback_bytes;
 		float* fallbackBufferCuda = nullptr;
 		std::function<char* (size_t N)> geomBufferFunc, binningBufferFunc, imgBufferFunc;
+		size_t lastSkippedInstances_ = 0;
 
 		BufferCopyRenderer* copyRenderer;
 	};

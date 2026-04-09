@@ -1,8 +1,12 @@
 set(CNU_PROJECT "extended_gaussian")
-project(${CNU_PROJECT} LANGUAGES CXX CUDA)
-
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
-set(CMAKE_CUDA_ARCHITECTURES native)
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    # CMake needs an architecture before enabling the CUDA language on some
+    # Linux toolchains; keep the old default while still allowing overrides.
+    set(CMAKE_CUDA_ARCHITECTURES native)
+endif()
+
+project(${CNU_PROJECT} LANGUAGES CXX CUDA)
 
 sibr_gitlibrary(TARGET CudaRasterizer
     GIT_REPOSITORY  "https://github.com/graphdeco-inria/diff-gaussian-rasterization.git"

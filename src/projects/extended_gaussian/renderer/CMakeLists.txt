@@ -9,6 +9,14 @@ sibr_gitlibrary(TARGET CudaRasterizer
     GIT_TAG         "255c532d5fd0c3d83afec0e8e49574b65ae381bd"
 )
 
+if(TARGET CudaRasterizer)
+    # CUDA 12.8 does not expose fixed-width integer types transitively through
+    # the upstream rasterizer's include chain.
+    target_compile_options(CudaRasterizer PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--pre-include=cstdint>
+    )
+endif()
+
 find_package(CUDAToolkit REQUIRED)
 
 file(GLOB_RECURSE ALL_FILES 
@@ -21,6 +29,9 @@ file(GLOB SHADERS "shaders/*.frag" "shaders/*.vert" "shaders/*.geom")
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${ALL_FILES})
 
 add_library(${PROJECT_NAME} SHARED ${ALL_FILES})
+target_include_directories(${PROJECT_NAME} PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 if(MSVC)
 target_compile_options(${PROJECT_NAME} PRIVATE

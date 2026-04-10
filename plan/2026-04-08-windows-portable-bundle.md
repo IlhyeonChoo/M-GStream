@@ -1,6 +1,6 @@
 # Windows Portable Bundle 작업 계획
 
-작성일: 2026-04-08  
+작성일: 2026-04-08
 작업 브랜치: `develop/windows-portable-bundle`
 
 ## 1. 목표

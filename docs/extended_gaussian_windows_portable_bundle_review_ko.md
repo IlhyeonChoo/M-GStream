@@ -1,6 +1,6 @@
 # Extended Gaussian Windows Portable Bundle Review Notes
 
-작성일: 2026-04-08  
+작성일: 2026-04-08
 대상 브랜치: `develop/windows-portable-bundle`
 
 ## 리뷰 범위

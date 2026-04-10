@@ -21,9 +21,15 @@ namespace sibr {
 		CUDA_SAFE_CALL_ALWAYS(cudaSetDevice(device));
 		cudaDeviceProp prop;
 		CUDA_SAFE_CALL_ALWAYS(cudaGetDeviceProperties(&prop, device));
-		if (prop.major < 7)
+		// Portable Windows bundles embed CUDA code for SM 7.5 (Turing) and newer.
+		// Older devices pass initial CUDA setup but fail later at first kernel launch
+		// with "no kernel image is available"; reject them here with a clear message.
+		if (prop.major < 7 || (prop.major == 7 && prop.minor < 5))
 		{
-			SIBR_ERR << "Sorry, need at least compute capability 7.0+!";
+			SIBR_ERR << "Unsupported CUDA device: compute capability "
+				<< prop.major << "." << prop.minor << " detected (" << prop.name << "). "
+				<< "This portable bundle requires SM 7.5 (Turing) or newer. "
+				<< "Rebuild from source with -DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES including your device architecture to use older GPUs.";
 		}
 	}
 
@@ -68,7 +74,7 @@ namespace sibr {
 	{
 	}
 
-	void RenderingSystem::onInstaceCreated(GaussianInstance& instance)
+	void RenderingSystem::onInstanceCreated(GaussianInstance& instance)
 	{
 		scene->createInstance(&instance);
 		if (RenderGaussianInstance* renderInstance = scene->getInstance(&instance)) {
@@ -76,7 +82,7 @@ namespace sibr {
 		}
 	}
 
-	void RenderingSystem::onInstaceUpdated(GaussianInstance& instance)
+	void RenderingSystem::onInstanceUpdated(GaussianInstance& instance)
 	{
 		if (RenderGaussianInstance* render_instance = scene->getInstance(&instance)) {
 			syncRenderInstanceAsset(*render_instance, instance);

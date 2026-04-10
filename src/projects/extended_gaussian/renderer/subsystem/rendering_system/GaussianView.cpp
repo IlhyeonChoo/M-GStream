@@ -16,6 +16,13 @@
 #include "projects/extended_gaussian/renderer/cuda/TransformKernels.cuh"
 
 namespace sibr {
+	namespace {
+		constexpr double kScratchGrowFactor = 1.0;
+		constexpr double kWorldGrowFactor = 1.0;
+		constexpr size_t kWorldShDegree = 3;
+		constexpr size_t kWorldShCoefficients = (kWorldShDegree + 1) * (kWorldShDegree + 1);
+	}
+
 	class BufferCopyRenderer
 	{
 
@@ -70,7 +77,8 @@ namespace sibr {
 
 	std::function<char* (size_t N)> resizeFunctional(void** ptr, size_t& S) {
 		// Returns a resize callback for a CUDA scratch buffer.
-		// Allocates 2x the requested size to amortise repeated growth.
+		// CUDA scratch buffers should avoid spare capacity because unused bytes
+		// are still fully resident in VRAM.
 		// The caller (CudaRasterizer) owns the pointer via ptr; this closure
 		// captures ptr by pointer and S by reference so both remain live.
 		auto lambda = [ptr, &S](size_t N) {
@@ -78,8 +86,11 @@ namespace sibr {
 			{
 				if (*ptr)
 					CUDA_SAFE_CALL(cudaFree(*ptr));
-				CUDA_SAFE_CALL(cudaMalloc(ptr, 2 * N));
-				S = 2 * N;
+				const size_t targetBytes = std::max(
+					N,
+					static_cast<size_t>(std::ceil(static_cast<double>(N) * kScratchGrowFactor)));
+				CUDA_SAFE_CALL(cudaMalloc(ptr, targetBytes));
+				S = targetBytes;
 			}
 			return reinterpret_cast<char*>(*ptr);
 			};
@@ -144,6 +155,7 @@ namespace sibr {
 
 		if (totalCount == 0)
 		{
+			releaseTransientBuffers();
 			return;
 		}
 
@@ -252,6 +264,94 @@ namespace sibr {
 		return lastSkippedInstances_;
 	}
 
+	void GaussianView::releaseTransientBuffers()
+	{
+		releaseScratchBuffers();
+		releaseWorldBuffers();
+		current_world_gausians_count = 0;
+	}
+
+	size_t GaussianView::worldBufferBytes() const
+	{
+		if (max_gaussians_count == 0) {
+			return 0;
+		}
+
+		const size_t gaussianCount = max_gaussians_count;
+		return gaussianCount * 3 * sizeof(float)
+			+ gaussianCount * 4 * sizeof(float)
+			+ gaussianCount * 3 * sizeof(float)
+			+ gaussianCount * sizeof(float)
+			+ gaussianCount * kWorldShCoefficients * 3 * sizeof(float)
+			+ gaussianCount * 2 * sizeof(int);
+	}
+
+	size_t GaussianView::scratchBufferBytes() const
+	{
+		return allocdGeom + allocdBinning + allocdImg;
+	}
+
+	size_t GaussianView::outputInteropBytes() const
+	{
+		const size_t imageBytes = static_cast<size_t>(_resolution.x()) * _resolution.y() * 3 * sizeof(float);
+		size_t totalBytes = imageBytes;
+		if (_interop_failed) {
+			totalBytes += fallback_bytes.size();
+		}
+
+		totalBytes += 2 * sizeof(sibr::Matrix4f);
+		totalBytes += 2 * 3 * sizeof(float);
+		return totalBytes;
+	}
+
+	void GaussianView::releaseScratchBuffers()
+	{
+		if (geomPtr) {
+			CUDA_SAFE_CALL(cudaFree(geomPtr));
+			geomPtr = nullptr;
+		}
+		if (binningPtr) {
+			CUDA_SAFE_CALL(cudaFree(binningPtr));
+			binningPtr = nullptr;
+		}
+		if (imgPtr) {
+			CUDA_SAFE_CALL(cudaFree(imgPtr));
+			imgPtr = nullptr;
+		}
+		allocdGeom = 0;
+		allocdBinning = 0;
+		allocdImg = 0;
+	}
+
+	void GaussianView::releaseWorldBuffers()
+	{
+		if (world_pos_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_pos_cuda));
+			world_pos_cuda = nullptr;
+		}
+		if (world_rot_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_rot_cuda));
+			world_rot_cuda = nullptr;
+		}
+		if (world_scale_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_scale_cuda));
+			world_scale_cuda = nullptr;
+		}
+		if (world_opacity_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_opacity_cuda));
+			world_opacity_cuda = nullptr;
+		}
+		if (world_shs_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_shs_cuda));
+			world_shs_cuda = nullptr;
+		}
+		if (world_rect_cuda) {
+			CUDA_SAFE_CALL(cudaFree(world_rect_cuda));
+			world_rect_cuda = nullptr;
+		}
+		max_gaussians_count = 0;
+	}
+
 	GaussianView::~GaussianView()
 	{
 		// Cleanup
@@ -265,25 +365,12 @@ namespace sibr {
 		}
 		glDeleteBuffers(1, &imageBuffer);
 
-		if (geomPtr)
-			cudaFree(geomPtr);
-		if (binningPtr)
-			cudaFree(binningPtr);
-		if (imgPtr)
-			cudaFree(imgPtr);
-
+		releaseTransientBuffers();
 
 		cudaFree(view_cuda);
 		cudaFree(proj_cuda);
 		cudaFree(cam_pos_cuda);
 		cudaFree(background_cuda);
-
-		cudaFree(world_pos_cuda);
-		cudaFree(world_rot_cuda);
-		cudaFree(world_scale_cuda);
-		cudaFree(world_opacity_cuda);
-		cudaFree(world_shs_cuda);
-		cudaFree(world_rect_cuda);
 
 		delete copyRenderer;
 	}
@@ -291,27 +378,24 @@ namespace sibr {
 	bool GaussianView::resizeWorldBuffersIfNeeded(size_t count)
 	{
 		if (count > max_gaussians_count) {
-			if (world_pos_cuda)     CUDA_SAFE_CALL(cudaFree(world_pos_cuda));
-			if (world_rot_cuda)     CUDA_SAFE_CALL(cudaFree(world_rot_cuda));
-			if (world_scale_cuda)   CUDA_SAFE_CALL(cudaFree(world_scale_cuda));
-			if (world_opacity_cuda) CUDA_SAFE_CALL(cudaFree(world_opacity_cuda));
-			if (world_shs_cuda)     CUDA_SAFE_CALL(cudaFree(world_shs_cuda));
-			if (world_rect_cuda)    CUDA_SAFE_CALL(cudaFree(world_rect_cuda));
+			const size_t previousBytes = worldBufferBytes();
+			releaseWorldBuffers();
 
-			max_gaussians_count = static_cast<size_t>(count * 1.2f);
-
-			const int sh_degree = 3;
-			const int sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
+			max_gaussians_count = std::max(
+				count,
+				static_cast<size_t>(std::ceil(static_cast<double>(count) * kWorldGrowFactor)));
 
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_pos_cuda, max_gaussians_count * 3 * sizeof(float)));
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_rot_cuda, max_gaussians_count * 4 * sizeof(float)));
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_scale_cuda, max_gaussians_count * 3 * sizeof(float)));
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_opacity_cuda, max_gaussians_count * 1 * sizeof(float)));
-			CUDA_SAFE_CALL(cudaMalloc((void**)&world_shs_cuda, max_gaussians_count * sh_coeffs * 3 * sizeof(float)));
+			CUDA_SAFE_CALL(cudaMalloc((void**)&world_shs_cuda, max_gaussians_count * kWorldShCoefficients * 3 * sizeof(float)));
 
 			CUDA_SAFE_CALL(cudaMalloc((void**)&world_rect_cuda, max_gaussians_count * 2 * sizeof(int)));
 
-			SIBR_LOG << "[VRAM] Resized world buffers for " << max_gaussians_count << " gaussians." << std::endl;
+			SIBR_LOG << "[VRAM] Resized world buffers for " << max_gaussians_count
+				<< " gaussians (" << previousBytes << " -> " << worldBufferBytes()
+				<< " bytes)." << std::endl;
 
 			return true;
 		}

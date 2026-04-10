@@ -13,7 +13,7 @@ This file provides guidance for any coding agent or human contributor working wi
 코드만 봐서는 알 수 없거나, "버그처럼 보이지만 의도된" 것들. 자동으로 "고치지" 마세요.
 
 - `archive_system` 과 `UI_system` 은 placeholder 입니다. 실제 구현된 서브시스템은 `rendering_system` 뿐.
-- 서브시스템 enum 값 `ATCHIVE_SYSTEM` 은 `ARCHIVE_SYSTEM` 의 오타이고, 콜백 이름 `onInstaceCreated` / `onInstaceUpdated` 도 `onInstanceCreated` / `onInstanceUpdated` 의 오타입니다. 둘 다 여러 파일에 걸쳐 load-bearing 이므로 부분 수정 금지 — 일괄 리네이밍만 허용.
+- 과거에는 archive subsystem enum과 instance lifecycle callback 쪽에 load-bearing typo가 있었고, 현재 브랜치에서는 정상 이름으로 일괄 리네이밍되었다. 오래된 문서나 예전 커밋을 볼 때만 이전 표기가 남아 있을 수 있다.
 - `GaussianLoader` 는 SH degree 0~3 을 파싱하지만, 다운스트림 월드 버퍼는 degree-3 레이아웃으로 하드코딩되어 있습니다. 더 낮은 degree 의 모델 로딩도 동작은 하지만 가정이 취약함.
 - 뷰어는 `"Gaussian View"` 라는 이름의 단일 1차 IBR subview 를 전제로 만들어져 있습니다. `RenderingSystem` / `GaussianView` 가 이 이름을 가정.
 
@@ -138,7 +138,7 @@ UI "Import PLY" (이름과 달리 디렉터리 picker)
 ```text
 UI "Create New Instance"
  -> GaussianScene::createInstance(...)
- -> RenderingSystem::onInstaceCreated(...)   # 의도된 오타
+ -> RenderingSystem::onInstanceCreated(...)
  -> RenderGaussianScene::createInstance(...)
  -> RenderGaussianInstance(...)
  -> GPUResourceManager lookup/create

@@ -105,7 +105,7 @@ Phase 0와 가장 큰 차이는 `viewer.onRender()` 안에 **streaming tick**이
   를 읽어 `GaussianField`를 만든다.
 - `ResourceManager::addField(...)`가 이 asset을 즉시 CPU resident 상태로 등록한다.
 - 사용자가 `Create New Instance`를 누르면 `GaussianScene::createInstance(...)`가 scene instance를 만든다.
-- `RenderingSystem::onInstaceCreated(...)`가 대응되는 `RenderGaussianInstance`를 만든다.
+- `RenderingSystem::onInstanceCreated(...)`가 대응되는 `RenderGaussianInstance`를 만든다.
 - manifest가 없으면 `RenderingSystem::tickStreaming()`은 `ensureManualGpuResidency()`로 fallback 하여, scene이 참조하는 CPU asset을 GPU에 올린다.
 
 즉 manifest가 없을 때는 여전히 "수동 import -> 수동 instance 생성 -> 수동 GPU 보장" 흐름이 살아 있다.

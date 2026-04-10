@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cuda_runtime.h>
 #include <iomanip>
 #include <sstream>
 
@@ -372,7 +373,7 @@ namespace sibr {
 			}
 
 			_selectedInstance = instance;
-			_subsystem[RENDERING_SYSTEM]->onInstaceCreated(*instance);
+			_subsystem[RENDERING_SYSTEM]->onInstanceCreated(*instance);
 			++createdCount;
 		}
 
@@ -474,7 +475,7 @@ namespace sibr {
 
 		if (ImGui::Begin("Scene Outliner", &_showScenePanel, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)) {
 			char phaseBuffer[128] = {};
-			std::snprintf(phaseBuffer, sizeof(phaseBuffer), "%s", _currentPhase.c_str());
+			strcpy_s(phaseBuffer, sizeof(phaseBuffer), _currentPhase.c_str());
 			if (ImGui::InputText("Current Phase", phaseBuffer, IM_ARRAYSIZE(phaseBuffer))) {
 				_currentPhase = phaseBuffer;
 			}
@@ -544,7 +545,7 @@ namespace sibr {
 				if (ImGui::Button("Create", ImVec2(120, 0))) {
 					_selectedInstance = _scene->createInstance(nameBuf, previewAssetId, tempPos, tempRot, tempScale);
 					if (_selectedInstance) {
-						_subsystem[RENDERING_SYSTEM]->onInstaceCreated(*_selectedInstance);
+						_subsystem[RENDERING_SYSTEM]->onInstanceCreated(*_selectedInstance);
 
 						SIBR_LOG << "Instance created: " << nameBuf << (previewAssetId.empty() ? " (No Asset)" : "") << std::endl;
 						ImGui::CloseCurrentPopup();
@@ -569,7 +570,8 @@ namespace sibr {
 				ImGui::EndPopup();
 			}
 
-			if (ImGui::BeginChild("OutlinerList", ImVec2(0, 250), true)) {
+			const bool outlinerOpen = ImGui::BeginChild("OutlinerList", ImVec2(0, 250), true);
+			if (outlinerOpen) {
 				auto& allInstances = _scene->getInstances();
 				for (auto& pair : allInstances) {
 					GaussianInstance* inst = pair.second.get();
@@ -578,8 +580,8 @@ namespace sibr {
 						_selectedInstance = inst;
 					}
 				}
-				ImGui::EndChild();
 			}
+			ImGui::EndChild();
 
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -591,17 +593,14 @@ namespace sibr {
 				if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
 					// 1. Position
 					if (ImGui::DragFloat3("Location", _selectedInstance->getPositionRef().data(), 0.1f)) {
-						
 					}
 
 					// 2. Rotation
 					if (ImGui::DragFloat3("Rotation", _selectedInstance->getEulerRef().data(), 0.5f)) {
-						
 					}
 
 					// 3. Scale
 					if (ImGui::DragFloat("Scale", &_selectedInstance->getScaleRef(), 0.01f, 0.001f, 100.0f)) {
-						
 					}
 				}
 
@@ -616,13 +615,13 @@ namespace sibr {
 					if (ImGui::BeginCombo("Source Field", currentFieldName.c_str())) {
 						if (ImGui::Selectable("None", currentAssetId.empty())) {
 							_selectedInstance->setAssetId("");
-							_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
+							_subsystem[RENDERING_SYSTEM]->onInstanceUpdated(*_selectedInstance);
 						}
 						for (const auto& assetId : _resourceManager->listAssetIds()) {
 							bool isSourceSelected = (assetId == currentAssetId);
 							if (ImGui::Selectable(assetId.c_str(), isSourceSelected)) {
 								_selectedInstance->setAssetId(assetId);
-								_subsystem[RENDERING_SYSTEM]->onInstaceUpdated(*_selectedInstance);
+								_subsystem[RENDERING_SYSTEM]->onInstanceUpdated(*_selectedInstance);
 							}
 						}
 						ImGui::EndCombo();
@@ -684,8 +683,25 @@ namespace sibr {
 
 			ImGui::TextWrapped("Manifest: %s", _loadedManifestPath.empty() ? "(none)" : _loadedManifestPath.c_str());
 			ImGui::Text("CPU Resident: %s MB", formatMegabytes(_resourceManager->totalCpuBytes()).c_str());
-			ImGui::Text("GPU Resident: %s MB", formatMegabytes(GPUResourceManager::getInstance().totalBytes()).c_str());
 			const RenderingSystem* renderingSystem = getRenderingSystem();
+			ImGui::TextUnformatted("VRAM (partial accounting):");
+			ImGui::Text("  GPU Assets:       %s MB", formatMegabytes(GPUResourceManager::getInstance().totalBytes()).c_str());
+			if (renderingSystem) {
+				if (const auto* view = renderingSystem->getView("Gaussian View")) {
+					ImGui::Text("  World buffers:    %s MB", formatMegabytes(view->worldBufferBytes()).c_str());
+					ImGui::Text("  Scratch (rast):   %s MB", formatMegabytes(view->scratchBufferBytes()).c_str());
+					ImGui::Text("  Output+Interop:   %s MB", formatMegabytes(view->outputInteropBytes()).c_str());
+				}
+			}
+			{
+				size_t freeB = 0, totalB = 0;
+				if (cudaMemGetInfo(&freeB, &totalB) == cudaSuccess) {
+					ImGui::Text("  CUDA allocatable used (device): %s / %s MB",
+						formatMegabytes(totalB - freeB).c_str(),
+						formatMegabytes(totalB).c_str());
+				}
+			}
+			ImGui::TextDisabled("* excludes CUDA runtime/context, cuBLAS/cuDNN, driver overhead");
 			const SwapManager::Stats* stats = renderingSystem ? renderingSystem->getSwapStats() : nullptr;
 			if (stats) {
 				ImGui::Text("Phase: %s", stats->current_phase.empty() ? "(none)" : stats->current_phase.c_str());
@@ -707,7 +723,8 @@ namespace sibr {
 			float panelWidth = ImGui::GetContentRegionAvail().x;
 			int columnCount = std::max(1, (int)(panelWidth / (tileWidth + padding)));
 
-			if (ImGui::BeginChild("AssetGrid")) {
+			const bool assetGridOpen = ImGui::BeginChild("AssetGrid");
+			if (assetGridOpen) {
 				const auto allAssets = _resourceManager->snapshotAssets();
 				int n = 0;
 				std::string fieldPendingDelete;
@@ -766,9 +783,8 @@ namespace sibr {
 						}
 					}
 				}
-
-				ImGui::EndChild();
 			}
+			ImGui::EndChild();
 		}
 		ImGui::End();
 	}

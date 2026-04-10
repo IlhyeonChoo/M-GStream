@@ -1,10 +1,15 @@
 set(CNU_PROJECT "extended_gaussian")
 set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    # CMake needs an architecture before enabling the CUDA language on some
-    # Linux toolchains; keep the old default while still allowing overrides.
-    set(CMAKE_CUDA_ARCHITECTURES native)
-endif()
+set(EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES
+    "75-real;86-real;89-real;120"
+    CACHE STRING "CUDA architectures for extended_gaussian and bundled CudaRasterizer builds. Covers Turing (SM 7.5) through Blackwell (SM 12.0)."
+)
+set(EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES "${EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES}")
+
+# Keep a project-local portable default instead of relying on generator-specific
+# 'native' detection or stale cache values from older build trees.
+set(CMAKE_CUDA_ARCHITECTURES "${EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES}")
+message(STATUS "extended_gaussian CUDA architectures: ${EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES}")
 
 project(${CNU_PROJECT} LANGUAGES CXX CUDA)
 
@@ -36,6 +41,12 @@ add_library(${PROJECT_NAME} SHARED ${ALL_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+if(TARGET CudaRasterizer)
+    set_target_properties(CudaRasterizer PROPERTIES
+        CUDA_ARCHITECTURES "${EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES}"
+    )
+endif()
 
 if(MSVC)
 target_compile_options(${PROJECT_NAME} PRIVATE

@@ -475,7 +475,7 @@ namespace sibr {
 
 		if (ImGui::Begin("Scene Outliner", &_showScenePanel, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)) {
 			char phaseBuffer[128] = {};
-			strcpy_s(phaseBuffer, sizeof(phaseBuffer), _currentPhase.c_str());
+			std::snprintf(phaseBuffer, sizeof(phaseBuffer), "%s", _currentPhase.c_str());
 			if (ImGui::InputText("Current Phase", phaseBuffer, IM_ARRAYSIZE(phaseBuffer))) {
 				_currentPhase = phaseBuffer;
 			}

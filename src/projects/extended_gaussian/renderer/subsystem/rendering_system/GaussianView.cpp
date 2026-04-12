@@ -128,6 +128,11 @@ namespace sibr {
 			fallback_bytes.resize(render_w * render_h * 3 * sizeof(float));
 			cudaMalloc(&fallbackBufferCuda, fallback_bytes.size());
 			_interop_failed = true;
+			SIBR_WRG << "GaussianView CUDA/GL interop disabled, using CUDA->CPU->GL fallback copy." << std::endl;
+		}
+		else
+		{
+			SIBR_LOG << "GaussianView CUDA/GL interop enabled." << std::endl;
 		}
 
 		background[0] = 0.f;

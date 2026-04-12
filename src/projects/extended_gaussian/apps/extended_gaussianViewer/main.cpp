@@ -26,7 +26,9 @@ int runInteractive(ExtendedGaussianViewer& viewer, Window& window)
 {
 	while (window.isOpened())
 	{
-		Input::poll();
+		if (window.GLFW() != nullptr) {
+			Input::poll();
+		}
 		window.makeContextCurrent();
 
 		if (Input::global().key().isPressed(Key::Escape))
@@ -46,8 +48,12 @@ int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGa
 {
 	const std::string manifestPath = args.manifest.get();
 	const std::string datasetPath = getCommandLineArgs().get<std::string>("path", "");
-	if (manifestPath.empty() && datasetPath.empty()) {
-		SIBR_WRG << "Headless mode requires either --manifest <file> or --path <model_dir>." << std::endl;
+	if (args.snapshot.get().empty()) {
+		SIBR_WRG << "Headless mode requires --snapshot <png_path>." << std::endl;
+		return EXIT_FAILURE;
+	}
+	if (args.render_width.get() <= 0 || args.render_height.get() <= 0) {
+		SIBR_WRG << "Headless mode requires positive --render-width and --render-height values." << std::endl;
 		return EXIT_FAILURE;
 	}
 
@@ -58,14 +64,14 @@ int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGa
 			return EXIT_FAILURE;
 		}
 	}
-	else if (!viewer.loadModelDirectoryAsInstance(datasetPath)) {
+	else if (!datasetPath.empty() && !viewer.loadModelDirectoryAsInstance(datasetPath)) {
 		SIBR_WRG << "Failed to load model directory for headless render: " << datasetPath << std::endl;
 		return EXIT_FAILURE;
 	}
 
 	window.makeContextCurrent();
 
-	const std::string snapshotPath = args.snapshot.get().empty() ? std::string("headless_snapshot.png") : args.snapshot.get();
+	const std::string snapshotPath = args.snapshot.get();
 	const bool waitForStreamingIdle = args.wait_for_streaming_idle.get();
 	const int maxFrames = std::max(1, args.max_headless_frames.get());
 	int consecutiveIdleFrames = 0;
@@ -73,7 +79,9 @@ int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGa
 
 	for (int frameIndex = 0; frameIndex < maxFrames; ++frameIndex)
 	{
-		Input::poll();
+		if (window.GLFW() != nullptr) {
+			Input::poll();
+		}
 		viewer.onUpdate(Input::global());
 		viewer.onRender(window);
 		streamingIdle = viewer.isStreamingIdle();
@@ -124,15 +132,23 @@ int main(int ac, char** av)
 	}
 
 	if (myArgs.headless.get()) {
+		if (myArgs.snapshot.get().empty()) {
+			SIBR_WRG << "Headless mode requires --snapshot <png file>." << std::endl;
+			return EXIT_FAILURE;
+		}
+		if (myArgs.render_width.get() <= 0 || myArgs.render_height.get() <= 0) {
+			SIBR_WRG << "Headless mode requires positive --render-width and --render-height values." << std::endl;
+			return EXIT_FAILURE;
+		}
 		myArgs.offscreen = true;
 		myArgs.no_gui = true;
 		myArgs.vsync = 0;
-		myArgs.win_width = std::max(1, myArgs.render_width.get());
-		myArgs.win_height = std::max(1, myArgs.render_height.get());
+		myArgs.win_width = myArgs.render_width.get();
+		myArgs.win_height = myArgs.render_height.get();
 	}
 
 	std::unique_ptr<Window> window;
-	if (myArgs.headless.get()) {
+	if (myArgs.headless.get() || myArgs.offscreen.get()) {
 		window = std::make_unique<Window>("Extended Gaussian Viewer", myArgs);
 	}
 	else {

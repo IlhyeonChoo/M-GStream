@@ -606,7 +606,7 @@ asset 삭제에는 제약이 있다.
 - manifest streaming queue drain 대기 옵션 제공
 - help 출력에 M2 전용 플래그 노출
 
-이번 수정으로도 아직 하지 않은 것은 다음과 같다.
+당시 기준 미완료 항목은 다음이었고, 아래 section 8에서 해소됐다.
 
 - true surfaceless EGL 보장
 - no-display 환경 end-to-end snapshot smoke 완료
@@ -619,3 +619,37 @@ asset 삭제에는 제약이 있다.
 - `./install/bin/extended_gaussianViewer_app --help` 실행 통과
 - `--help`에서 새 M2 플래그 노출 확인
 - Ubuntu Desktop에서 이 브랜치의 재빌드와 실행이 가능하다는 사용자 확인이 있었다.
+
+
+## 8. 2026-04-12 M2 direct EGL completion
+
+이후 마무리 작업에서 M2의 남은 no-display blocker를 `Window` 레벨에서 정리했다.
+
+추가 수정 파일:
+
+- `src/core/graphics/Window.hpp`
+- `src/core/graphics/Window.cpp`
+- `src/core/graphics/CMakeLists.txt`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+
+적용한 변경:
+
+- `Window` 에 direct EGL pbuffer context 경로를 추가했다.
+- `DISPLAY/WAYLAND_DISPLAY` 가 없는 `offscreen` 실행은 GLFW 대신 direct EGL backend를 사용한다.
+- `sibr_graphics` target에 `EGL_FOUND` 시 `libEGL` 링크를 추가했다.
+- `--headless` 는 `--snapshot` 을 필수로 검증하고, `--path` 없이 empty snapshot smoke 를 허용한다.
+- 일반 `--offscreen` 도 size-based ctor를 사용하도록 app entry를 정리했다.
+
+검증 결과:
+
+- no-display empty snapshot smoke: `PASS`
+  - `/tmp/extended_gaussian_empty.png`, `64x64`, `173` bytes
+- no-display Gaussian snapshot smoke: `PASS`
+  - `/tmp/extended_gaussian_bonsai.png`, `640x360`, `386837` bytes
+  - model: `../gaussian-splatting/eval/bonsai`
+  - runtime log: `GaussianView CUDA/GL interop enabled.`
+- no-display `--offscreen --nogui` probe: `PASS`
+  - direct EGL 초기화 후 timeout `124`; 기존 `DISPLAY` crash 제거
+- Ubuntu Desktop GUI rebuild/run: 사용자 확인 `PASS`
+
+이 시점 기준으로 M2 구현 이슈는 닫고 M3로 넘어갈 수 있다.

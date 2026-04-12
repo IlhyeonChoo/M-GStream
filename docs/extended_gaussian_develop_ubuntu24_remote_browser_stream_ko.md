@@ -319,8 +319,70 @@ JSON shape는 다음과 같다.
 - `--help` 출력에서 새 M2 플래그 노출 확인
 - Ubuntu Desktop에서 이 브랜치의 재빌드와 실행이 가능하다는 사용자 확인이 있었다.
 
-아직 남은 확인:
+당시 남은 확인(후속 section 10에서 해소):
 
 - 실제 `--headless --snapshot` 명령으로 PNG가 생성되는지 desktop 환경에서 다시 확인
 - real no-display 환경에서 `GLFW_PLATFORM_NULL` / EGL 조합이 실제로 충분한지 확인
 - 이후 M3/M4에서 server runtime과 연결
+
+
+## 10. 2026-04-12 M2 direct EGL headless 마무리
+
+이후 후속 수정으로 M2의 no-display acceptance도 실제 코드 경로에서 닫았다.
+
+추가로 수정한 파일은 다음과 같다.
+
+- `src/core/graphics/Window.hpp`
+- `src/core/graphics/Window.cpp`
+- `src/core/graphics/CMakeLists.txt`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+
+핵심 변경은 다음과 같다.
+
+- `Window`
+  - `DISPLAY` 와 `WAYLAND_DISPLAY` 가 모두 없는 `offscreen` 실행에서는 GLFW를 거치지 않고 direct EGL pbuffer context를 생성하도록 분기했다.
+  - 생성 순서는 `EGL_EXT_platform_device` 우선, 가능하지 않으면 surfaceless/default display fallback 순으로 구성했다.
+  - headless EGL 경로에서는 `size/position/isOpened/setVsynced/enableCursor/swapBuffer` 가 GLFW window 없이도 동작하도록 보강했다.
+- `sibr_graphics` CMake
+  - Linux에서 `EGL_FOUND` 인 경우 `libEGL` 을 실제 링크하도록 추가했다.
+- `main.cpp`
+  - `--headless` 에서 `--snapshot` 누락 시 nonzero exit 하도록 validation을 추가했다.
+  - `--render-width`, `--render-height` 가 0 이하이면 nonzero exit 하도록 validation을 추가했다.
+  - `--headless` 는 `--path` 없이도 empty snapshot smoke 를 허용하게 바꿨다.
+  - 일반 `--offscreen` 실행도 margin ctor 대신 size-based `Window` ctor 를 사용하게 바꿔 no-display probe 에서 음수 크기가 들어가지 않게 했다.
+  - GLFW window가 없는 direct EGL 경로에서는 poll을 건너뛰도록 루프를 보강했다.
+
+검증 메모:
+
+- `cmake --build build-ninja-m2 --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --install build-ninja-m2` 통과
+- `env -u DISPLAY -u WAYLAND_DISPLAY ./install/bin/extended_gaussianViewer_app --headless --render-width 64 --render-height 64 --snapshot /tmp/extended_gaussian_empty.png` 통과
+  - 결과: `/tmp/extended_gaussian_empty.png`, `173` bytes, `64x64` PNG
+- `env -u DISPLAY -u WAYLAND_DISPLAY ./install/bin/extended_gaussianViewer_app --headless --render-width 640 --render-height 360 --path ../gaussian-splatting/eval/bonsai --snapshot /tmp/extended_gaussian_bonsai.png` 통과
+  - 결과: `/tmp/extended_gaussian_bonsai.png`, `386837` bytes, `640x360` PNG
+  - 로그: `GaussianView CUDA/GL interop enabled.`
+- `timeout 2s env -u DISPLAY -u WAYLAND_DISPLAY ./install/bin/extended_gaussianViewer_app --offscreen --nogui --width 64 --height 64` 실행 시 direct EGL 초기화 후 `EXIT:124` 확인
+  - 즉 기존 `DISPLAY environment variable is missing` crash 는 제거됐다.
+- Ubuntu Desktop에서 이 브랜치의 재빌드와 GUI 실행이 가능하다는 사용자 확인이 있었다.
+
+M2 completion report:
+
+```text
+- milestone: M2 headless EGL
+- build: pass
+- installed executable: install/bin/extended_gaussianViewer_app
+- EGL backend used: direct EGL pbuffer (device/surfaceless/default fallback)
+- interop: pass
+- empty snapshot: /tmp/extended_gaussian_empty.png, 173 bytes, 64x64
+- model snapshot: /tmp/extended_gaussian_bonsai.png, 386837 bytes, 640x360
+- GUI regression: pass (Ubuntu Desktop user validation)
+- M5 handoff capture target: "Gaussian View" subview via captureView helper
+- unresolved blockers:
+  - none for M2 scope
+```
+
+정리:
+
+- M2 기준의 headless render context, empty snapshot, model snapshot, no-display probe, GUI regression evidence가 모두 확보됐다.
+- M5 handoff용 capture 경계는 여전히 `"Gaussian View"` subview의 `captureView(...)` helper다.
+- 이후 단계는 M3 server build surface 와 M4 HTTP skeleton 으로 넘어가면 된다.

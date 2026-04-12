@@ -270,3 +270,57 @@ JSON shape는 다음과 같다.
 
 즉, 지금까지의 작업은 후속 구현을 위한 기반 정리이며,
 다음 단계부터는 신규 파일 추가 수준을 넘어 기존 실행 경로와 렌더링 루프를 실제로 건드리게 된다.
+
+
+## 9. 2026-04-12 M2 headless one-shot snapshot 후속 구현
+
+이번 후속 수정에서는 M2 범위를 "CLI에서 finite offscreen render를 수행하고 PNG snapshot을 저장한 뒤 종료하는 최소 경로"로 좁혀 실제 코드에 연결했다.
+
+수정한 파일은 다음과 같다.
+
+- `src/core/graphics/Window.cpp`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
+
+핵심 변경은 다음과 같다.
+
+- `main.cpp`
+  - `--headless`
+  - `--manifest`
+  - `--render-width`
+  - `--render-height`
+  - `--snapshot`
+  - `--wait-for-streaming-idle`
+  - `--max-headless-frames`
+  를 정식 CLI 인자로 추가했다.
+  - interactive loop와 별도로 finite headless loop를 추가했다.
+  - headless mode에서는 `offscreen`, `nogui`, `vsync=0`을 강제로 적용하고 margin constructor 대신 size-based `Window` 경로를 사용한다.
+- `ExtendedGaussianViewer`
+  - GUI가 비활성 상태일 때 top-level ImGui 경로를 타지 않도록 guard를 추가했다.
+  - raw model directory를 바로 load해서 scene instance를 만들 수 있는 helper를 추가했다.
+  - `"Gaussian View"` subview를 PNG로 저장하는 snapshot helper를 추가했다.
+  - manifest streaming queue가 비었는지 판정하는 helper를 추가했다.
+  - manifest bounds focus 로직을 일반 bounds helper로 분리해 non-manifest headless path에서도 재사용하게 했다.
+- `Window.cpp`
+  - `GLFW_PLATFORM_NULL`이 사용 가능한 빌드에서는 `offscreen` 초기화 시 null platform hint를 먼저 주도록 보강했다.
+
+이번 구현에서 의도적으로 유지한 제약은 다음과 같다.
+
+- 현재 `offscreen`은 여전히 hidden GLFW window 경로다.
+- 즉 이번 M2는 "true surfaceless EGL"이 아니라 "one-shot offscreen snapshot CLI" 구현이다.
+- HTTP / MJPEG / WebSocket server는 아직 포함하지 않았다.
+
+검증 메모:
+
+- `cmake --build build-ninja-m2 --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --install build-ninja-m2` 통과
+- `./install/bin/extended_gaussianViewer_app --help` 실행 통과
+- `--help` 출력에서 새 M2 플래그 노출 확인
+- Ubuntu Desktop에서 이 브랜치의 재빌드와 실행이 가능하다는 사용자 확인이 있었다.
+
+아직 남은 확인:
+
+- 실제 `--headless --snapshot` 명령으로 PNG가 생성되는지 desktop 환경에서 다시 확인
+- real no-display 환경에서 `GLFW_PLATFORM_NULL` / EGL 조합이 실제로 충분한지 확인
+- 이후 M3/M4에서 server runtime과 연결

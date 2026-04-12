@@ -570,3 +570,52 @@ asset 삭제에는 제약이 있다.
 - 시스템 전역 CUDA Toolkit 설치가 아니므로, 다른 개발자가 같은 방식으로 재현하려면 `local_cuda` 기반 절차를 공유해야 함
 
 다음 단계로는 manifest / residency / swap policy를 추가하는 Phase 1 구현과, 실제 샘플 데이터셋 기반 기능 검증이 자연스럽다.
+
+
+## 7. 2026-04-12 M2 headless one-shot snapshot CLI
+
+`develop/ubuntu24-remote-browser-stream` 브랜치에서 M2 범위의 최소 구현을 실제 app/runtime 경로에 연결했다.
+
+이번 묶음에서 수정한 코드는 다음과 같다.
+
+- `src/core/graphics/Window.cpp`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
+
+적용한 변경은 다음과 같다.
+
+- `main.cpp`
+  - `--headless`, `--manifest`, `--render-width`, `--render-height`, `--snapshot`, `--wait-for-streaming-idle`, `--max-headless-frames`를 추가했다.
+  - 기존 interactive loop와 별도로 finite headless loop를 추가했다.
+  - headless mode에서는 `offscreen`, `nogui`, `vsync=0`을 강제하고 size-based `Window` ctor를 사용한다.
+- `ExtendedGaussianViewer`
+  - GUI가 비활성 상태일 때 top-level ImGui 코드가 실행되지 않도록 guard를 추가했다.
+  - raw model directory를 직접 load해서 scene instance를 만드는 helper를 추가했다.
+  - `"Gaussian View"` snapshot 저장 helper를 추가했다.
+  - manifest streaming idle 판정 helper를 추가했다.
+  - manifest bounds focus 경로를 일반 bounds helper로 분리했다.
+- `Window.cpp`
+  - `GLFW_PLATFORM_NULL`이 존재하는 빌드에서는 `offscreen` 초기화 시 null platform hint를 먼저 주도록 보강했다.
+
+이번 수정으로 닫은 범위는 다음과 같다.
+
+- CLI에서 finite offscreen render 실행
+- manifest 또는 raw model directory 입력 허용
+- PNG snapshot 저장
+- manifest streaming queue drain 대기 옵션 제공
+- help 출력에 M2 전용 플래그 노출
+
+이번 수정으로도 아직 하지 않은 것은 다음과 같다.
+
+- true surfaceless EGL 보장
+- no-display 환경 end-to-end snapshot smoke 완료
+- HTTP / MJPEG / WebSocket server runtime 연결
+
+검증 메모:
+
+- `cmake --build build-ninja-m2 --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --install build-ninja-m2` 통과
+- `./install/bin/extended_gaussianViewer_app --help` 실행 통과
+- `--help`에서 새 M2 플래그 노출 확인
+- Ubuntu Desktop에서 이 브랜치의 재빌드와 실행이 가능하다는 사용자 확인이 있었다.

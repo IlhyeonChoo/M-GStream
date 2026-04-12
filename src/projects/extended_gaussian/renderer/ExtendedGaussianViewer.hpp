@@ -52,11 +52,15 @@ namespace sibr {
 		const ResourceManager* getResourceManager() const;
 		RenderingSystem* getRenderingSystem();
 		const RenderingSystem* getRenderingSystem() const;
+		bool loadModelDirectoryAsInstance(const std::string& modelPath);
+		bool captureGaussianViewSnapshot(const std::string& snapshotPath);
+		bool isStreamingIdle() const;
 
 	private:
 		bool loadManifestFile(const std::string& path);
 		size_t createManifestInstances(bool onlyMissing = true);
 		void focusCameraOnManifest();
+		void focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds);
 		static const char* cpuStateLabel(CpuState state);
 		static const char* gpuStateLabel(GpuState state);
 		static std::string formatMegabytes(size_t bytes);
@@ -86,4 +90,3 @@ namespace sibr {
 		uint64_t _frameIndex = 0;
 	};
 }
-

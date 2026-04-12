@@ -6,6 +6,7 @@
 #include <core/system/CommandLineArgs.hpp>
 
 #include <algorithm>
+#include <boost/filesystem.hpp>
 #include <cstdio>
 #include <cuda_runtime.h>
 #include <iomanip>
@@ -65,7 +66,9 @@ namespace sibr {
 		glClear(GL_COLOR_BUFFER_BIT);
 		glClearColor(1.f, 1.f, 1.f, 1.f);
 
-		onGui(win);
+		if (_enableGUI) {
+			onGui(win);
+		}
 
 		RenderingSystem* renderingSystem = getRenderingSystem();
 		if (renderingSystem) {
@@ -91,6 +94,10 @@ namespace sibr {
 
 	void ExtendedGaussianViewer::onGui(Window& win)
 	{
+		if (!_enableGUI) {
+			return;
+		}
+
 		MultiViewBase::onGui(win);
 
 		// Menu
@@ -305,6 +312,108 @@ namespace sibr {
 		return static_cast<const RenderingSystem*>(_subsystem[RENDERING_SYSTEM].get());
 	}
 
+	bool ExtendedGaussianViewer::loadModelDirectoryAsInstance(const std::string& modelPath)
+	{
+		if (modelPath.empty() || !_scene || !_resourceManager) {
+			return false;
+		}
+
+		auto field = GaussianLoader::load(modelPath);
+		if (!field) {
+			return false;
+		}
+
+		const std::string assetId = field->name;
+		if (assetId.empty()) {
+			return false;
+		}
+
+		Vector3f minBounds = field->min_edges;
+		Vector3f maxBounds = field->max_edges;
+		const bool addedField = _resourceManager->addField(std::move(field));
+		if (!addedField) {
+			const auto existingField = _resourceManager->getCpuFieldShared(assetId);
+			if (!existingField) {
+				return false;
+			}
+			minBounds = existingField->min_edges;
+			maxBounds = existingField->max_edges;
+		}
+
+		for (const auto& instancePair : _scene->getInstances()) {
+			if (instancePair.second && instancePair.second->getAssetId() == assetId) {
+				_selectedField = assetId;
+				_selectedInstance = instancePair.second.get();
+				focusCameraOnBounds(minBounds, maxBounds);
+				return true;
+			}
+		}
+
+		std::string instanceName = assetId;
+		int suffix = 1;
+		while (_scene->getInstance(instanceName) != nullptr) {
+			instanceName = assetId + "_" + std::to_string(suffix++);
+		}
+
+		GaussianInstance* instance = _scene->createInstance(instanceName, assetId);
+		if (!instance) {
+			return false;
+		}
+
+		_selectedField = assetId;
+		_selectedInstance = instance;
+		if (auto* renderingSystem = getRenderingSystem()) {
+			renderingSystem->onInstanceCreated(*instance);
+		}
+
+		focusCameraOnBounds(minBounds, maxBounds);
+		return true;
+	}
+
+	bool ExtendedGaussianViewer::captureGaussianViewSnapshot(const std::string& snapshotPath)
+	{
+		if (snapshotPath.empty()) {
+			return false;
+		}
+
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			return false;
+		}
+
+		boost::filesystem::path outputPath(snapshotPath);
+		boost::filesystem::path outputDirectory = outputPath.parent_path();
+		std::string fileName = outputPath.filename().string();
+		if (fileName.empty()) {
+			fileName = "gaussian_view.png";
+		}
+		if (boost::filesystem::path(fileName).extension().empty()) {
+			fileName += ".png";
+		}
+
+		const std::string directory = outputDirectory.empty() ? std::string(".") : outputDirectory.string();
+		captureView("Gaussian View", directory, fileName);
+		return boost::filesystem::exists(boost::filesystem::path(directory) / fileName);
+	}
+
+	bool ExtendedGaussianViewer::isStreamingIdle() const
+	{
+		const RenderingSystem* renderingSystem = getRenderingSystem();
+		if (!renderingSystem || !renderingSystem->hasManifest()) {
+			return true;
+		}
+
+		const SwapManager::Stats* stats = renderingSystem->getSwapStats();
+		if (!stats) {
+			return true;
+		}
+
+		return stats->pending_disk_loads == 0
+			&& stats->pending_gpu_uploads == 0
+			&& stats->pending_gpu_evictions == 0
+			&& stats->skipped_instances_last_frame == 0;
+	}
+
 	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path)
 	{
 		if (!_manifestStore.load(path)) {
@@ -386,16 +495,6 @@ namespace sibr {
 			return;
 		}
 
-		const auto viewIt = _ibrSubViews.find("Gaussian View");
-		if (viewIt == _ibrSubViews.end()) {
-			return;
-		}
-
-		auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler);
-		if (!handler) {
-			return;
-		}
-
 		bool hasBounds = false;
 		Vector3f minBounds = Vector3f::Zero();
 		Vector3f maxBounds = Vector3f::Zero();
@@ -412,6 +511,21 @@ namespace sibr {
 		}
 
 		if (!hasBounds) {
+			return;
+		}
+
+		focusCameraOnBounds(minBounds, maxBounds);
+	}
+
+	void ExtendedGaussianViewer::focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds)
+	{
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			return;
+		}
+
+		auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler);
+		if (!handler) {
 			return;
 		}
 

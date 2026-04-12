@@ -1,6 +1,6 @@
 # Extended Gaussian Windows 설치 번들 가이드
 
-작성일: 2026-04-08  
+작성일: 2026-04-08
 대상 브랜치: `develop/windows-portable-bundle`
 
 ## 1. 목적
@@ -56,7 +56,7 @@ cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Commo
 cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake --build build-portable --target extended_gaussianViewer_app_install'
 ```
 
-`cmake --install build-portable` 로 전체 설치를 시도하면, 현재 viewer에 직접 필요하지 않은 다른 타깃이 아직 안 빌드된 경우 실패할 수 있다.  
+`cmake --install build-portable` 로 전체 설치를 시도하면, 현재 viewer에 직접 필요하지 않은 다른 타깃이 아직 안 빌드된 경우 실패할 수 있다.
 Windows에서는 `extended_gaussianViewer_app_install` 타깃을 표준 설치 경로로 사용하는 것을 권장한다.
 
 `RTX 50` 계열을 포함한 다른 Windows PC로 실행 파일을 옮길 계획이면, configure 시 CUDA 아키텍처를 최소 `75-real;86-real;89-real;120`으로 잡는 것을 기본값으로 유지하는 편이 안전하다.
@@ -267,10 +267,10 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\check_windows_runtime.p
 
 ## 7. 데이터 배치 규칙
 
-저장소에는 `swaptest/` 데이터가 포함되어 있지 않다.  
+저장소에는 `swaptest/` 데이터가 포함되어 있지 않다.
 즉, manifest만 복사해도 바로 렌더링되지는 않는다.
 
-현재 예제 manifest들은 상대 경로 `../swaptest/...`를 사용한다.  
+현재 예제 manifest들은 상대 경로 `../swaptest/...`를 사용한다.
 따라서 번들 루트 구조는 아래처럼 맞추는 것이 가장 쉽다.
 
 ```text
@@ -314,7 +314,7 @@ extended_gaussian-windows-portable/
 - 실패 지점:
   - scratch buffer 재할당 경로의 `cudaMalloc(ptr, 2 * N)`
 
-이번 Windows portability 작업은 이 이슈를 수정하지 않는다.  
+이번 Windows portability 작업은 이 이슈를 수정하지 않는다.
 대신 다른 Windows PC에서도 동일 증상이 재현되는지 확인 항목으로 유지한다.
 
 ## 10. 권장 검증 순서

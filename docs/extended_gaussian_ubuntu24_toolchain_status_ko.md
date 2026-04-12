@@ -1,158 +1,231 @@
-# Ubuntu 24.04 Toolchain Status for Remote Browser Stream Follow-up
+# Ubuntu 24.04 Toolchain Status
 
-작성일: 2026-04-08  
-대상 브랜치: `develop/ubuntu24-remote-browser-stream`
+작성일: 2026-04-09
+대상 브랜치: `develop/ubuntu24-desktop-server`
+마일스톤: `M1 build bootstrap`
 
-## 1. 목적
+## 1. 현재 결론
 
-이 문서는 현재 저장소에 남아 있는 `build-ninja/` partial configure 산출물을 기준으로,
-Ubuntu 24.04 계열 환경에서 remote browser stream 후속 브랜치가 먼저 확인해야 할
-툴체인 상태를 고정하기 위한 기록이다.
+Ubuntu 24.04에서 기존 GUI viewer의 configure / build / install은 통과했다.
 
-핵심 목적은 다음 두 가지다.
+다만 이 SSH 세션에는 desktop X11 display가 없어서 installed viewer의 GUI smoke는 완료하지 못했다.
 
-- 현재 브랜치의 신규 `renderer/server/` 코드가 아니라 기존 CUDA toolchain bring-up이
-  선행 블로커라는 점을 분리한다.
-- 이후 headless EGL / HTTP / MJPEG / WebSocket 구현 브랜치가
-  "새 코드 문제"와 "기존 configure 문제"를 빠르게 구분하게 한다.
+현재 검증 상태:
 
-## 2. 현재 워크스페이스에서 확인한 근거
+| 항목 | 결과 |
+|---|---|
+| Ninja configure | PASS |
+| `extended_gaussianViewer_app` build | PASS |
+| `install` target | PASS |
+| `cmake --install build-ninja` | PASS |
+| installed binary dynamic link | PASS, `not found` 0개 |
+| GUI smoke on real desktop display | NOT RUN, 현재 세션에 `DISPLAY` 없음 |
+| startup under Xvfb | FAIL, Mesa GL context 생성 후 segfault |
 
-### 2.1 `build-ninja/` 상태
+## 2. 환경 스냅샷
 
-현재 `build-ninja/`에는 다음이 남아 있다.
+현재 shell 기준:
 
-- `CMakeCache.txt`
-- `CMakeFiles/CMakeConfigureLog.yaml`
-- `CMakeFiles/3.28.3/CompilerIdCUDA/`
+| 항목 | 값 |
+|---|---|
+| OS | Ubuntu 24.04.4 LTS |
+| CMake | 3.28.3 |
+| Ninja | 1.11.1 |
+| GCC / G++ | 13.3.0 |
+| Python | 3.12.3 |
+| selected CUDA compiler | `/usr/local/cuda-12.8/bin/nvcc` |
+| selected CUDA version | CUDA 12.8 / V12.8.93 |
+| GPU | NVIDIA RTX PRO 4500 Blackwell |
+| driver | 580.126.09 |
 
-반대로 다음 파일은 없다.
+Ubuntu packages observed by CMake / pkg-config:
 
-- `build-ninja/build.ninja`
+| dependency | observed value |
+|---|---|
+| GLEW | 2.2.0 / `/usr/lib/x86_64-linux-gnu/libGLEW.so` |
+| GLFW | 3.3.10 / `/usr/lib/x86_64-linux-gnu/libglfw.so.3.3` |
+| ASSIMP | 5.3.0 |
+| OpenCV | 4.6.0 |
+| FFmpeg libavcodec | 60.31.102 |
+| FFmpeg libavformat | 60.16.100 |
+| Embree | 4.3.0 / `libembree4.so.4` |
 
-즉, configure는 시작되었지만 generator 출력이 완성되기 전에 중단된 상태로 본다.
+## 3. Configure 기록
 
-### 2.2 cache / configure log 기준 환경 스냅샷
-
-현재 남아 있는 산출물에서 직접 확인되는 값은 다음과 같다.
-
-- generator
-  - `Ninja`
-- C++ compiler
-  - `/usr/bin/c++`
-- CUDA compiler
-  - `/usr/bin/nvcc`
-- CMake compiler-id 로그에 기록된 `nvcc`
-  - `Cuda compilation tools, release 12.0, V12.0.140`
-- CMake compiler / OpenMP 로그에 기록된 host compiler
-  - GCC `13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1)`
-- configure log 상 system string
-  - `Linux - 10.0.15063.0 - x86_64`
-
-## 3. 현재 로그가 보여주는 마지막 확인 지점
-
-현재 저장소에 남아 있는 증거만 기준으로 하면,
-configure는 `src/projects/extended_gaussian/renderer/CMakeLists.txt:2 (project)`에 들어간 뒤
-`CMakeDetermineCUDACompiler.cmake:75`의 CUDA compiler vendor / identification 단계까지는
-도달한 흔적이 남아 있다.
-
-`CMakeConfigureLog.yaml`의 마지막 CUDA 관련 메시지는 아래 의미를 가진다.
-
-- CMake가 `/usr/bin/nvcc`를 실제로 호출했다.
-- `nvcc` 자체는 실행되어 NVIDIA CUDA compiler driver로 인식되었다.
-- 그러나 configure log에는 그 이후 단계까지 진행되었다고 확정할 보존 증거가 남아 있지 않다.
-- 최종 generator 파일인 `build.ninja`도 생성되지 않았다.
-
-이 상태를 현재 기준으로 가장 보수적으로 정리하면 다음과 같다.
-
-- **persisted evidence가 보여주는 마지막 확실한 CUDA 관련 지점은 compiler identification 단계다.**
-- **top-level configure는 그 다음 단계로 넘어가 완결되지 못했다.**
-
-## 4. 무엇이 확실하고, 무엇은 아직 확실하지 않은가
-
-### 4.1 확실한 사실
-
-- 현재 브랜치의 신규 `renderer/server/` 문서/계약 파일은 configure 이전 단계 산출물과는 분리되어 있다.
-- partial configure tree는 project source compile 이전에 이미 CUDA toolchain bring-up 구간에 걸려 있다.
-- `CompilerIdCUDA/tmp/` 산출물이 남아 있으므로
-  CMake는 적어도 CUDA compiler-id용 임시 소스 생성과 일부 `nvcc` 호출까지 수행했다.
-
-### 4.2 아직 로그만으로 확정할 수 없는 점
-
-- 이번 워크스페이스에 남은 파일만으로는 당시 terminal stderr 전체가 보존되어 있지 않다.
-- 따라서 "정확히 어떤 한 줄의 fatal error가 마지막으로 출력되었는가"는
-  현재 보존된 build tree만으로 재현 없이 단정할 수 없다.
-
-이 문서에서는 위 한계를 명시한 상태로,
-후속 브랜치가 **실제 기능 코드보다 먼저 CUDA configure 문제를 확인해야 한다는 사실**만 고정한다.
-
-## 5. 현재 브랜치 코드와 분리해서 봐야 하는 이유
-
-`renderer/server/` 선행 작업은 다음 범위에만 머물러 있다.
-
-- server option parser
-- control message parser
-- remote camera pose adapter
-- browser reference client static assets
-
-이 파일들은 아직 다음과 연결되지 않았다.
-
-- `main.cpp`
-- `ExtendedGaussianViewer`
-- `RenderingSystem`
-- `GaussianView`
-- actual HTTP / MJPEG / WebSocket runtime
-
-따라서 configure가 CUDA bring-up에서 막힌 상태라면,
-그것은 현재 브랜치의 server prep 코드가 아니라
-기존 renderer / CUDA toolchain 경로를 먼저 분리해서 봐야 한다는 뜻이다.
-
-## 6. 후속 브랜치에서 가장 먼저 다시 확인할 항목
-
-다음 브랜치가 실제 headless / server runtime 작업을 시작하기 전에,
-최소한 아래 조합을 함께 기록하는 편이 좋다.
-
-- `cmake --version`
-- `nvcc --version`
-- `c++ --version`
-- `ldd --version`
-- `echo $CUDAHOSTCXX`
-- `echo $CUDACXX`
-- `echo $CC`
-- `echo $CXX`
-
-추가로 아래 조건도 같이 확인한다.
-
-- `/usr/bin/nvcc`가 어떤 CUDA toolkit 패키지에 연결되어 있는지
-- host GCC가 CUDA 12.0과 호환 범위 안에 있는지
-- configure 후 `build-ninja/build.ninja`가 실제로 생성되는지
-- `CMakeConfigureLog.yaml`가 CUDA compiler-id 이후 단계까지 이어지는지
-
-## 7. exact failure line이 필요할 때의 권장 캡처
-
-현재 partial build tree만으로는 exact stderr가 남아 있지 않으므로,
-후속 브랜치에서 정말 한 줄 단위 실패 메시지를 남겨야 할 때는
-configure를 다시 실행할 때 terminal 출력까지 함께 캡처해야 한다.
-
-예시:
+현재 성공한 configure command:
 
 ```sh
-cmake -S . -B build-ninja -G Ninja
+cmake -S . -B build-ninja -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-12.8
 ```
 
-그리고 아래 두 종류를 함께 보관한다.
+결과:
 
-- terminal stderr / stdout transcript
-- `build-ninja/CMakeFiles/CMakeConfigureLog.yaml`
+- `build-ninja/build.ninja` 생성됨.
+- `build-ninja/CMakeCache.txt`의 CUDA compiler는 `/usr/local/cuda-12.8/bin/nvcc`로 정렬됨.
+- Embree는 Ubuntu package config를 통해 `/usr/lib/x86_64-linux-gnu/cmake/embree-4.3.0` 계열로 발견됨.
 
-## 8. 지금 이 문서가 고정하는 결론
+## 4. 재현했던 configure 실패
 
-- 현재 브랜치의 후속 작업을 막는 첫 번째 외부 블로커는
-  remote browser stream runtime 구현이 아니라 **CUDA configure bring-up**이다.
-- 현재 저장소에 남아 있는 증거만 보면,
-  configure는 `renderer` 서브프로젝트 진입 후
-  **CUDA compiler identification 단계까지는 진행된 흔적이 있고**,
-  최종 generator 파일인 `build.ninja`는 생성되지 않았다.
-- 따라서 다음 기능 브랜치는 네트워크 서버 코드보다 먼저
-  Ubuntu 24.04 + `/usr/bin/nvcc` + GCC 13 계열 조합이
-  이 저장소의 configure를 끝까지 통과시키는지 재확인해야 한다.
+명시적으로 CUDA 12.8을 선택하지 않았을 때 CMake가 `/usr/bin/nvcc` wrapper를 선택했다.
+
+그때의 compiler-id 단계는 CUDA 12.0 경로로 들어갔고, Ubuntu 24.04의 system headers와 조합되어 실패했다.
+
+대표 fatal line:
+
+```text
+/usr/include/stdlib.h:141:8: error: '_Float32' does not name a type; did you mean '_Float16'?
+```
+
+M1에서는 CUDA 12.0 / `/usr/bin/nvcc`를 고치지 않았다.
+
+대신 이 checkout의 canonical Ninja tree는 CUDA 12.8 compiler를 명시해서 configure했다.
+
+## 5. Build / Install 검증
+
+통과한 command:
+
+```sh
+cmake --build build-ninja --target CudaRasterizer -j2
+cmake --build build-ninja --target sibr_video -j2
+cmake --build build-ninja --target extended_gaussian -j4
+cmake --build build-ninja --target extended_gaussianViewer_app -j4
+cmake --build build-ninja --target install -j4
+cmake --install build-ninja
+```
+
+설치 결과:
+
+| check | result |
+|---|---|
+| `install/bin/extended_gaussianViewer_app` | executable exists |
+| `install/bin/libextended_gaussian_rwdi.so` | exists |
+| `install/ibr_resources.ini` | exists |
+| `install/shaders/core` | exists |
+| `install/shaders/extended_gaussian` | exists |
+| `ldd install/bin/extended_gaussianViewer_app | rg 'not found'` | no matches |
+
+주의:
+
+- `cmake --install build-ninja`는 build를 수행하지 않는다.
+- 처음 raw install을 실행했을 때 아직 `mrf`가 빌드되어 있지 않아 `libmrf_rwdi.so` 설치에서 실패했다.
+- `cmake --build build-ninja --target install -j4`로 install 대상까지 빌드한 뒤 `cmake --install build-ninja`는 exit 0으로 통과했다.
+
+## 6. M1에서 적용한 portability fixes
+
+| 영역 | 변경 요지 |
+|---|---|
+| Embree | `find_package(embree CONFIG)`로 Ubuntu Embree 4 config를 수용하고, Raycaster에 Embree 3/4 query wrapper를 추가했다. |
+| CUDA rasterizer | upstream external target에 CUDA `--pre-include=cstdint`를 추가했다. CUDA 12.8에서 upstream header가 기대한 fixed-width integer transitive include가 없었다. |
+| renderer public headers | `extended_gaussian` target의 renderer directory를 PUBLIC include path로 내보냈다. Public header들이 `"Config.hpp"`를 포함한다. |
+| FFmpeg encoder | legacy `AVStream::codec` / `avcodec_encode_video2` 경로를 explicit `AVCodecContext` + send/receive API로 옮겼다. |
+| VideoUtils | 1-channel histogram mode loop가 vector element를 pair처럼 structured-binding하던 템플릿 오류를 index loop로 고쳤다. |
+| GaussianLoader | `std::ifstream` / `FLT_MAX` 사용 header를 직접 포함했다. |
+| GUI phase input | MSVC 전용 `strcpy_s`를 portable bounded `std::snprintf`로 대체했다. |
+
+## 7. Runtime smoke 결과
+
+현재 세션:
+
+```text
+DISPLAY=
+WAYLAND_DISPLAY=
+XDG_SESSION_TYPE=
+```
+
+No-display startup:
+
+```sh
+timeout 8s install/bin/extended_gaussianViewer_app --offscreen --nogui --width 320 --height 240 --vsync 0
+```
+
+결과:
+
+```text
+exit 134
+X11: The DISPLAY environment variable is missing
+```
+
+`DISPLAY=:0` / `DISPLAY=:1` probe:
+
+```text
+exit 134
+X11: Failed to open display :0
+X11: Failed to open display :1
+```
+
+Xvfb startup:
+
+```sh
+xvfb-run -a timeout 8s install/bin/extended_gaussianViewer_app --nogui --width 320 --height 240 --vsync 0
+```
+
+결과:
+
+```text
+exit 139
+OpenGL Version: 4.5 (Compatibility Profile) Mesa 25.2.8-0ubuntu0.24.04.1
+Interactive camera using (0.09,1100) near/far planes.
+Segmentation fault
+```
+
+해석:
+
+- installed binary는 dynamic loader / resource lookup / GLFW init까지 진행했다.
+- 현재 세션에는 real desktop NVIDIA OpenGL context가 없다.
+- Xvfb는 Mesa OpenGL context로 시작되며, 이 viewer의 CUDA / OpenGL 전제와 동일한 smoke 환경으로 보지 않는다.
+- M1 GUI smoke는 Ubuntu Desktop 또는 X11-forwarded NVIDIA GL 세션에서 재실행해야 한다.
+
+## 8. Smoke model / manifest
+
+앱에서 확인된 preload 인자는 `--manifest <json>`이다.
+
+Raw Gaussian model directory를 받는 `--model` / `--data` / `--ply` 인자는 확인하지 못했다.
+
+GUI import는 `Import PLY` 버튼이 directory picker를 열고, 선택된 model directory를 `GaussianLoader::load(path)`로 넘기는 방식이다.
+
+현재 머신에서 찾은 작은 complete model 후보:
+
+```text
+/home/ilhyeonchu/ReCompose3D/3DGS/gaussian-grouping/output/smoke_teatime_iter1
+```
+
+구조:
+
+```text
+cfg_args
+point_cloud/iteration_1/point_cloud.ply
+```
+
+모델 import / `"Gaussian View"` 렌더 smoke는 GUI display 접근 실패 때문에 아직 실행하지 않았다.
+
+## 9. 다음 사람이 실행할 desktop smoke
+
+real desktop session 또는 GPU-backed X11 forwarding에서:
+
+```sh
+cd /home/ilhyeonchu/ReCompose3D/3DGS/extended_gaussian-desktop-server
+install/bin/extended_gaussianViewer_app --width 1280 --height 720 --vsync 0
+```
+
+확인할 것:
+
+- window가 열린다.
+- Scene Outliner / Resource Browser 메뉴가 열린다.
+- `Import PLY`로 아래 디렉터리를 선택할 수 있다.
+
+```text
+/home/ilhyeonchu/ReCompose3D/3DGS/gaussian-grouping/output/smoke_teatime_iter1
+```
+
+- `Create New Instance` 후 `"Gaussian View"`에서 1 frame 이상 렌더한다.
+- Escape 또는 window close로 종료한다.
+
+## 10. M2 / M3으로 넘길 항목
+
+- `--offscreen`이 현재 no-display GLFW init을 통과하지 못한다. M2 headless EGL에서 별도로 다룬다.
+- Xvfb / Mesa GL에서의 segfault는 desktop-viewer 완료 조건으로 보지 않는다. 다만 headless work에서는 CUDA / GL interop를 명시적으로 분리해야 한다.
+- `/usr/bin/nvcc` CUDA 12.0 wrapper가 남아 있다. 이 workspace에서는 CUDA 12.8 compiler path를 configure에 명시해야 한다.
+- remote server, MJPEG, WebSocket, snapshot, OOM fix는 M1에서 시작하지 않았다.

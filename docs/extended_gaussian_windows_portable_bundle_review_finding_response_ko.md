@@ -1,6 +1,6 @@
 # Windows Portable Bundle Review Finding Response
 
-작성일: 2026-04-08  
+작성일: 2026-04-08
 기준 리뷰:
 
 - `tools/windows/package_windows_portable_bundle.ps1:186-190`

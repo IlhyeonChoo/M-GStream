@@ -1,7 +1,7 @@
 # `develop/windows-portable-bundle` 브랜치 변경 기록
 
-작성일: 2026-04-08  
-대상 브랜치: `develop/windows-portable-bundle`  
+작성일: 2026-04-08
+대상 브랜치: `develop/windows-portable-bundle`
 비교 기준: `main..HEAD`
 
 ## 1. 문서 목적

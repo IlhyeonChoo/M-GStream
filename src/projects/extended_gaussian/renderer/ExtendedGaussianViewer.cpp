@@ -6,6 +6,7 @@
 #include <core/system/CommandLineArgs.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cuda_runtime.h>
 #include <iomanip>
 #include <sstream>
@@ -474,7 +475,7 @@ namespace sibr {
 
 		if (ImGui::Begin("Scene Outliner", &_showScenePanel, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize)) {
 			char phaseBuffer[128] = {};
-			strcpy_s(phaseBuffer, sizeof(phaseBuffer), _currentPhase.c_str());
+			std::snprintf(phaseBuffer, sizeof(phaseBuffer), "%s", _currentPhase.c_str());
 			if (ImGui::InputText("Current Phase", phaseBuffer, IM_ARRAYSIZE(phaseBuffer))) {
 				_currentPhase = phaseBuffer;
 			}
@@ -592,17 +593,14 @@ namespace sibr {
 				if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
 					// 1. Position
 					if (ImGui::DragFloat3("Location", _selectedInstance->getPositionRef().data(), 0.1f)) {
-						
 					}
 
 					// 2. Rotation
 					if (ImGui::DragFloat3("Rotation", _selectedInstance->getEulerRef().data(), 0.5f)) {
-						
 					}
 
 					// 3. Scale
 					if (ImGui::DragFloat("Scale", &_selectedInstance->getScaleRef(), 0.01f, 0.001f, 100.0f)) {
-						
 					}
 				}
 

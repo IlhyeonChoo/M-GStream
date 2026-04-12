@@ -1,6 +1,6 @@
 # Windows Portable Bundle Review Follow-up Plan
 
-작성일: 2026-04-08  
+작성일: 2026-04-08
 기준 문서: `docs/extended_gaussian_windows_portable_bundle_review_ko.md`
 
 ## 1. 요약

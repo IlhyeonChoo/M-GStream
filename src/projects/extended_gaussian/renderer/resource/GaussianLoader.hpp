@@ -6,6 +6,9 @@
 
 #include <boost/filesystem.hpp>
 
+#include <cfloat>
+#include <fstream>
+
 namespace sibr {
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianLoader {
 	public:

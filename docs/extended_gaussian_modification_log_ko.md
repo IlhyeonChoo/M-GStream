@@ -840,6 +840,7 @@ M5에서 M4 HTTP skeleton 위에 실제 MJPEG stream delivery 를 연결했다.
 - `cmake --build build-ninja --target install --parallel` 통과
 - Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로 build-target install을 canonical command로 사용한다. 필요한 타깃을 미리 빌드한 뒤에는 `cmake --install build-ninja` 도 통과한다.
 - `install_runtime.cmake` 의 Linux `INSTALL_PDB` early-return 과 executable postfix 처리 버그를 수정해 `extended_gaussianViewer_app_install` 이 runtime dependency 와 `www/` 를 실제로 설치하도록 정리했다.
+- 상세 코드 비교: `docs/source_diff_details_738e9d3_to_733ee7d/`
 - `--headless --server --path ../gaussian-splatting/eval/bonsai` startup 통과
 - `/healthz`: `200 OK`, `version=m5-mjpeg-stream`, `jpeg_backend=TurboJPEG`, stream metrics 확인
 - installed binary `./install/bin/extended_gaussianViewer_app --help` 통과

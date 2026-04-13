@@ -636,6 +636,7 @@ curl -sSI http://127.0.0.1:18080/stream.mjpg
   - app만 install할 때는 `cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel` 을 사용한다.
   - 필요한 타깃을 미리 빌드한 뒤에는 `cmake --install build-ninja` 도 exit `0` 으로 통과한다.
   - `install_runtime.cmake` 의 Linux `INSTALL_PDB` early-return 과 executable postfix 처리 버그를 함께 수정해 app 전용 install target이 dependency bundle 과 `www/` install rule 을 실제로 생성하도록 정리했다.
+  - 상세 코드 비교: `docs/source_diff_details_738e9d3_to_733ee7d/`
 - no-display startup 통과
   - `Initialization of direct headless EGL`
   - `GaussianView CUDA/GL interop enabled.`

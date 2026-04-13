@@ -824,7 +824,7 @@ M5에서 M4 HTTP skeleton 위에 실제 MJPEG stream delivery 를 연결했다.
 
 적용한 변경:
 
-- `JpegEncoder` 를 추가해 JPEG backend 를 `TurboJPEG` 또는 `OpenCV` 로 분리했다.
+- `JpegEncoder` 를 추가해 JPEG backend 를 `TurboJPEG` 또는 `OpenCV` 로 분리했고, Linux에서는 system package가 없을 때 `extlibs/libjpeg-turbo/` 아래 vendored build를 자동 사용하도록 정리했다.
 - `MjpegStreamer` 를 추가해 PBO readback, latest-only raw queue, encoder worker, latest encoded frame fan-out 을 구현했다.
 - `RemoteStreamServer` 가 `/stream.mjpg` 를 실제 multipart MJPEG 로 응답하도록 구현했다.
 - `RemoteStreamServer` stop path 가 accept loop / client sessions / encoder wait 를 정리하도록 lifetime 을 다시 맞췄다.
@@ -837,10 +837,13 @@ M5에서 M4 HTTP skeleton 위에 실제 MJPEG stream delivery 를 연결했다.
 검증 결과:
 
 - `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
-- `cmake --install build-ninja` 는 현재 환경의 기존 `mrf` 산출물 누락으로 실패
-- build-tree executable + explicit `LD_LIBRARY_PATH` 로 runtime smoke 수행
+- `cmake --build build-ninja --target install --parallel` 통과
+- Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로 build-target install을 canonical command로 사용한다. 필요한 타깃을 미리 빌드한 뒤에는 `cmake --install build-ninja` 도 통과한다.
+- `install_runtime.cmake` 의 Linux `INSTALL_PDB` early-return 과 executable postfix 처리 버그를 수정해 `extended_gaussianViewer_app_install` 이 runtime dependency 와 `www/` 를 실제로 설치하도록 정리했다.
 - `--headless --server --path ../gaussian-splatting/eval/bonsai` startup 통과
-- `/healthz`: `200 OK`, `version=m5-mjpeg-stream`, `jpeg_backend=OpenCV`, stream metrics 확인
+- `/healthz`: `200 OK`, `version=m5-mjpeg-stream`, `jpeg_backend=TurboJPEG`, stream metrics 확인
+- installed binary `./install/bin/extended_gaussianViewer_app --help` 통과
+- installed binary `--headless --server --path ../gaussian-splatting/eval/bonsai` + `/healthz` smoke 에서 installed `www_root` 와 `jpeg_backend=TurboJPEG` 확인
 - `/stream.mjpg` single client: `200 OK`, multipart boundary 확인, 29개 JPEG part 수신 확인
 - `/stream.mjpg` two clients: 두 클라이언트 모두 `200 OK`, 각 39개 JPEG part 수신 확인, live `active_clients=2` 확인
 - `/`: `200 OK`

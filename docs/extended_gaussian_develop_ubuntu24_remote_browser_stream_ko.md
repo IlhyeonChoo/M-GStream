@@ -589,7 +589,7 @@ M5에서는 M4의 HTTP skeleton 위에 실제 MJPEG frame delivery 경로를 연
 
 - `renderer/server/JpegEncoder.*` 신규 추가
   - JPEG encoder backend 를 분리했다.
-  - `TurboJPEG` 가 있으면 우선 사용하고, 현재 Ubuntu 24.04 작업 환경처럼 미설치 상태에서는 `OpenCV imencode(.jpg)` fallback 으로 동작한다.
+  - system `TurboJPEG` 가 없으면 configure 시 `extlibs/libjpeg-turbo/` 아래에 vendored `libjpeg-turbo` build 를 자동 준비하고, 그 라이브러리를 우선 사용한다.
 - `renderer/server/MjpegStreamer.*` 신규 추가
   - render thread 에서 `IRenderTarget` 을 PBO ring 으로 비동기 readback
   - latest-only raw queue + encoder worker thread
@@ -631,19 +631,24 @@ curl -sSI http://127.0.0.1:18080/stream.mjpg
 실제 검증 결과:
 
 - `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
-- `cmake --install build-ninja` 는 현재 환경의 기존 `mrf` 산출물 누락 때문에 실패
-  - `extlibs/mrf/build/libmrf_rwdi.so` missing
-  - M5 runtime smoke 는 build-tree binary + explicit `LD_LIBRARY_PATH` 로 수행
+- `cmake --build build-ninja --target install --parallel` 통과
+  - Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로, canonical install 명령은 build-target install 이다.
+  - app만 install할 때는 `cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel` 을 사용한다.
+  - 필요한 타깃을 미리 빌드한 뒤에는 `cmake --install build-ninja` 도 exit `0` 으로 통과한다.
+  - `install_runtime.cmake` 의 Linux `INSTALL_PDB` early-return 과 executable postfix 처리 버그를 함께 수정해 app 전용 install target이 dependency bundle 과 `www/` install rule 을 실제로 생성하도록 정리했다.
 - no-display startup 통과
   - `Initialization of direct headless EGL`
   - `GaussianView CUDA/GL interop enabled.`
   - `Loading 1076487 Gaussians (SH Degree: 3)`
-  - `RemoteStreamServer listening on 127.0.0.1:18080 ... JPEG backend: OpenCV`
+  - `RemoteStreamServer listening on 127.0.0.1:18080 ... JPEG backend: TurboJPEG`
 - `/healthz`:
   - `200 OK`
   - `version=m5-mjpeg-stream`
-  - `jpeg_backend=OpenCV`
+  - `jpeg_backend=TurboJPEG`
   - `stream.width=640`, `stream.height=360`, `stream.fps=5`
+- installed app smoke:
+  - `./install/bin/extended_gaussianViewer_app --help` 통과
+  - installed binary 로 `--headless --server --path ../gaussian-splatting/eval/bonsai` 실행 후 `/healthz` 에서 `jpeg_backend=TurboJPEG` 와 installed `www_root` 확인
 - single-client `/stream.mjpg` smoke:
   - `200 OK`
   - `Content-Type: multipart/x-mixed-replace; boundary=ExGaussBoundary`

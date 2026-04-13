@@ -38,7 +38,9 @@ This file provides guidance for any coding agent or human contributor working wi
 ```sh
 # Ninja 로 빌드 + 설치
 cmake --build build-ninja --target extended_gaussianViewer_app
-cmake --install build-ninja
+cmake --build build-ninja --target install --parallel
+# app만 install하고 싶으면 아래를 사용
+cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel
 # 실행
 install/bin/extended_gaussianViewer_app.exe
 # 문서
@@ -47,7 +49,7 @@ cmake --build build-ninja --target DOCUMENTATION   # 출력: install/docs/index.
 
 Visual Studio 쪽은 `build/sibr_projects.sln` 을 열어 `ALL_BUILD` → `INSTALL` 순으로 빌드.
 
-**테스트 스위트도, lint 타깃도 없습니다.** `ctest`, 단위 테스트 러너, 정적 분석 명령 모두 존재하지 않습니다. 변경 검증은 `extended_gaussianViewer_app` 을 직접 실행해서 합니다.
+**테스트 스위트도, lint 타깃도 없습니다.** `ctest`, 단위 테스트 러너, 정적 분석 명령 모두 존재하지 않습니다. 변경 검증은 `extended_gaussianViewer_app` 을 직접 실행해서 합니다. Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로, 먼저 `cmake --build build-ninja --target install --parallel` 또는 `cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel` 을 사용하세요. 필요한 타깃을 이미 빌드한 뒤에는 `cmake --install build-ninja` 도 동작합니다.
 
 빌드 타깃:
 - `extended_gaussian` — 프로젝트 공유 라이브러리 (렌더러 코드)

@@ -414,6 +414,21 @@ namespace sibr {
 			&& stats->skipped_instances_last_frame == 0;
 	}
 
+	double ExtendedGaussianViewer::getAppTimeSeconds() const
+	{
+		return _appTimeSec;
+	}
+
+	uint64_t ExtendedGaussianViewer::getFrameIndex() const
+	{
+		return _frameIndex;
+	}
+
+	const std::string& ExtendedGaussianViewer::getCurrentPhase() const
+	{
+		return _currentPhase;
+	}
+
 	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path)
 	{
 		if (!_manifestStore.load(path)) {

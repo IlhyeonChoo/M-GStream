@@ -115,13 +115,23 @@ namespace sibr {
 		ServerOptions options;
 		options.enabled = args.get<bool>("server", false);
 
-		const std::string listenHost = args.get<std::string>("listen-host", options.listen_host);
+		const std::string bindHost = args.get<std::string>("bind", "");
+		if (!bindHost.empty()) {
+			options.listen_host = bindHost;
+		}
+
+		const std::string listenHost = args.get<std::string>("listen-host", "");
 		if (!listenHost.empty()) {
 			options.listen_host = listenHost;
 		}
 
-		const int listenPort = args.get<int>("listen-port", options.listen_port);
-		if (listenPort > 0 && listenPort <= 65535) {
+		const int bindPort = args.get<int>("port", 0);
+		if (bindPort != 0) {
+			options.listen_port = bindPort;
+		}
+
+		const int listenPort = args.get<int>("listen-port", 0);
+		if (listenPort != 0) {
 			options.listen_port = listenPort;
 		}
 
@@ -134,6 +144,12 @@ namespace sibr {
 		options.stream_fps = sanitizedPositiveInt(
 			args.get<int>("stream-fps", options.stream_fps),
 			options.stream_fps);
+
+		const std::string wwwRoot = args.get<std::string>("www-root", "");
+		if (!wwwRoot.empty()) {
+			options.www_root = wwwRoot;
+		}
+
 		return options;
 	}
 

@@ -16,6 +16,7 @@ namespace sibr {
 		int stream_width = 1280;
 		int stream_height = 720;
 		int stream_fps = 15;
+		std::string www_root;
 	};
 
 	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RemoteCameraPose {

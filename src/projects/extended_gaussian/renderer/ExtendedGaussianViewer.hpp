@@ -55,6 +55,9 @@ namespace sibr {
 		bool loadModelDirectoryAsInstance(const std::string& modelPath);
 		bool captureGaussianViewSnapshot(const std::string& snapshotPath);
 		bool isStreamingIdle() const;
+		double getAppTimeSeconds() const;
+		uint64_t getFrameIndex() const;
+		const std::string& getCurrentPhase() const;
 
 	private:
 		bool loadManifestFile(const std::string& path);

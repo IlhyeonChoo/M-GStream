@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -7,10 +9,26 @@
 #include <core/system/CommandLineArgs.hpp>
 #include "projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp"
 #include "projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.hpp"
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#include "projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp"
+#include "projects/extended_gaussian/renderer/server/ServerProtocol.hpp"
+#endif
 
 using namespace sibr;
 
 namespace {
+
+volatile std::sig_atomic_t g_shutdown_requested = 0;
+
+void handleProcessSignal(int /*signal_number*/)
+{
+	g_shutdown_requested = 1;
+}
+
+bool shutdownRequested()
+{
+	return g_shutdown_requested != 0;
+}
 
 struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
 	Arg<std::string> manifest = { "manifest", "", "path to a manifest json file" };
@@ -20,11 +38,49 @@ struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
 	Arg<std::string> snapshot = { "snapshot", "", "png file path for headless snapshot output" };
 	Arg<bool> wait_for_streaming_idle = { "wait-for-streaming-idle", "wait until manifest streaming queues drain before capturing" };
 	Arg<int> max_headless_frames = { "max-headless-frames", 600, "maximum number of frames to render in headless mode" };
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+	Arg<bool> server = { "server", "start the remote browser stream HTTP server" };
+	Arg<std::string> listen_host = { "listen-host", "127.0.0.1", "HTTP listen host for remote browser streaming" };
+	Arg<int> listen_port = { "listen-port", 8080, "HTTP listen port for remote browser streaming" };
+	Arg<std::string> bind = { "bind", "", "alias for --listen-host" };
+	Arg<int> port = { "port", 0, "alias for --listen-port" };
+	Arg<int> stream_width = { "stream-width", 1280, "reserved MJPEG stream width for M5" };
+	Arg<int> stream_height = { "stream-height", 720, "reserved MJPEG stream height for M5" };
+	Arg<int> stream_fps = { "stream-fps", 15, "reserved MJPEG stream FPS for M5" };
+	Arg<std::string> www_root = { "www-root", "", "override directory for remote stream static assets" };
+#endif
 };
 
-int runInteractive(ExtendedGaussianViewer& viewer, Window& window)
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& viewer)
 {
-	while (window.isOpened())
+	RendererHealthSnapshot snapshot;
+	const RenderingSystem* rendering_system = viewer.getRenderingSystem();
+	snapshot.initialized = rendering_system != nullptr;
+	snapshot.has_manifest = rendering_system != nullptr && rendering_system->hasManifest();
+	snapshot.frame_index = viewer.getFrameIndex();
+	snapshot.app_time_sec = viewer.getAppTimeSeconds();
+	return snapshot;
+}
+
+void updateServerHealth(RemoteStreamServer* server, const ExtendedGaussianViewer& viewer)
+{
+	if (!server) {
+		return;
+	}
+	server->setRendererHealthSnapshot(makeRendererHealthSnapshot(viewer));
+}
+#endif
+
+int runInteractive(
+	ExtendedGaussianViewer& viewer,
+	Window& window
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+	, RemoteStreamServer* server
+#endif
+)
+{
+	while (window.isOpened() && !shutdownRequested())
 	{
 		if (window.GLFW() != nullptr) {
 			Input::poll();
@@ -39,6 +95,9 @@ int runInteractive(ExtendedGaussianViewer& viewer, Window& window)
 		viewer.onUpdate(Input::global());
 		viewer.onRender(window);
 		viewer.onSwapBuffer(window);
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+		updateServerHealth(server, viewer);
+#endif
 	}
 
 	return EXIT_SUCCESS;
@@ -46,8 +105,8 @@ int runInteractive(ExtendedGaussianViewer& viewer, Window& window)
 
 int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGaussianViewerAppArgs& args)
 {
-	const std::string manifestPath = args.manifest.get();
-	const std::string datasetPath = getCommandLineArgs().get<std::string>("path", "");
+	const std::string manifest_path = args.manifest.get();
+	const std::string dataset_path = getCommandLineArgs().get<std::string>("path", "");
 	if (args.snapshot.get().empty()) {
 		SIBR_WRG << "Headless mode requires --snapshot <png_path>." << std::endl;
 		return EXIT_FAILURE;
@@ -57,56 +116,56 @@ int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGa
 		return EXIT_FAILURE;
 	}
 
-	if (!manifestPath.empty()) {
-		const RenderingSystem* renderingSystem = viewer.getRenderingSystem();
-		if (!renderingSystem || !renderingSystem->hasManifest()) {
-			SIBR_WRG << "Failed to load manifest for headless render: " << manifestPath << std::endl;
+	if (!manifest_path.empty()) {
+		const RenderingSystem* rendering_system = viewer.getRenderingSystem();
+		if (!rendering_system || !rendering_system->hasManifest()) {
+			SIBR_WRG << "Failed to load manifest for headless render: " << manifest_path << std::endl;
 			return EXIT_FAILURE;
 		}
 	}
-	else if (!datasetPath.empty() && !viewer.loadModelDirectoryAsInstance(datasetPath)) {
-		SIBR_WRG << "Failed to load model directory for headless render: " << datasetPath << std::endl;
+	else if (!dataset_path.empty() && !viewer.loadModelDirectoryAsInstance(dataset_path)) {
+		SIBR_WRG << "Failed to load model directory for headless render: " << dataset_path << std::endl;
 		return EXIT_FAILURE;
 	}
 
 	window.makeContextCurrent();
 
-	const std::string snapshotPath = args.snapshot.get();
-	const bool waitForStreamingIdle = args.wait_for_streaming_idle.get();
-	const int maxFrames = std::max(1, args.max_headless_frames.get());
-	int consecutiveIdleFrames = 0;
-	bool streamingIdle = false;
+	const std::string snapshot_path = args.snapshot.get();
+	const bool wait_for_streaming_idle = args.wait_for_streaming_idle.get();
+	const int max_frames = std::max(1, args.max_headless_frames.get());
+	int consecutive_idle_frames = 0;
+	bool streaming_idle = false;
 
-	for (int frameIndex = 0; frameIndex < maxFrames; ++frameIndex)
+	for (int frame_index = 0; frame_index < max_frames; ++frame_index)
 	{
 		if (window.GLFW() != nullptr) {
 			Input::poll();
 		}
 		viewer.onUpdate(Input::global());
 		viewer.onRender(window);
-		streamingIdle = viewer.isStreamingIdle();
+		streaming_idle = viewer.isStreamingIdle();
 
-		if (!waitForStreamingIdle) {
+		if (!wait_for_streaming_idle) {
 			break;
 		}
 
-		if (streamingIdle) {
-			++consecutiveIdleFrames;
-			if (consecutiveIdleFrames >= 2) {
+		if (streaming_idle) {
+			++consecutive_idle_frames;
+			if (consecutive_idle_frames >= 2) {
 				break;
 			}
 		}
 		else {
-			consecutiveIdleFrames = 0;
+			consecutive_idle_frames = 0;
 		}
 	}
 
-	if (!viewer.captureGaussianViewSnapshot(snapshotPath)) {
-		SIBR_WRG << "Failed to capture headless snapshot to " << snapshotPath << std::endl;
+	if (!viewer.captureGaussianViewSnapshot(snapshot_path)) {
+		SIBR_WRG << "Failed to capture headless snapshot to " << snapshot_path << std::endl;
 		return EXIT_FAILURE;
 	}
 
-	if (waitForStreamingIdle && consecutiveIdleFrames < 2) {
+	if (wait_for_streaming_idle && consecutive_idle_frames < 2) {
 		SIBR_WRG << "Headless render reached max frame budget before streaming became idle." << std::endl;
 		return EXIT_FAILURE;
 	}
@@ -124,12 +183,31 @@ int main(int ac, char** av)
 	setenv("CUDA_MODULE_LOADING", "LAZY", 1);
 #endif
 
+	std::signal(SIGINT, handleProcessSignal);
+#ifdef SIGTERM
+	std::signal(SIGTERM, handleProcessSignal);
+#endif
+
 	CommandLineArgs::parseMainArgs(ac, av);
 	ExtendedGaussianViewerAppArgs myArgs;
 	myArgs.displayHelpIfRequired();
 	if (myArgs.showHelp.get()) {
 		return EXIT_SUCCESS;
 	}
+
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+	const ServerOptions server_options = ParseServerOptions(getCommandLineArgs());
+	if (server_options.enabled && myArgs.headless.get()) {
+		SIBR_WRG << "--server is not compatible with finite --headless mode. Use --offscreen --nogui --server for a long-running no-display server." << std::endl;
+		return EXIT_FAILURE;
+	}
+#else
+	const bool requested_server = getCommandLineArgs().get<bool>("server", false);
+	if (requested_server) {
+		SIBR_WRG << "This build does not include remote stream server support. Reconfigure with -DSIBR_BUILD_REMOTE_STREAM=ON." << std::endl;
+		return EXIT_FAILURE;
+	}
+#endif
 
 	if (myArgs.headless.get()) {
 		if (myArgs.snapshot.get().empty()) {
@@ -161,5 +239,27 @@ int main(int ac, char** av)
 		return runHeadless(viewer, *window, myArgs);
 	}
 
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+	std::unique_ptr<RemoteStreamServer> server;
+	if (server_options.enabled) {
+		server = std::make_unique<RemoteStreamServer>(server_options);
+		updateServerHealth(server.get(), viewer);
+		std::string server_error;
+		if (!server->start(server_error)) {
+			SIBR_WRG << "Failed to start RemoteStreamServer: " << server_error << std::endl;
+			return EXIT_FAILURE;
+		}
+	}
+
+	const int result = runInteractive(viewer, *window, server.get());
+	if (server) {
+		const auto stop_start = std::chrono::steady_clock::now();
+		server->stop();
+		const double stop_elapsed_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - stop_start).count();
+		SIBR_LOG << "RemoteStreamServer stop elapsed: " << stop_elapsed_sec << " sec" << std::endl;
+	}
+	return result;
+#else
 	return runInteractive(viewer, *window);
+#endif
 }

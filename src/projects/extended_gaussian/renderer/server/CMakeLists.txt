@@ -4,6 +4,8 @@ set(SERVER_SOURCES
     CameraPoseAdapter.cpp
     CameraPoseAdapter.hpp
     Config.hpp
+    RemoteStreamServer.cpp
+    RemoteStreamServer.hpp
     ServerProtocol.cpp
     ServerProtocol.hpp
 )
@@ -28,6 +30,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 )
 target_compile_definitions(${PROJECT_NAME} PUBLIC
     SIBR_EXTENDED_GAUSSIAN_SERVER_STATIC_DEFINE
+)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    SIBR_EXTENDED_GAUSSIAN_REMOTE_WWW_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/www"
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES

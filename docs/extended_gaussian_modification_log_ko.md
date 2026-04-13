@@ -800,3 +800,52 @@ M4에서 `extended_gaussianViewer_app` 와 `extended_gaussian_server` 를 실제
 - `Ctrl+C` 종료 후 `RemoteStreamServer stop elapsed: ... sec` 로그 및 exit code `0` 확인
 
 이 시점 기준 M4는 HTTP skeleton / static asset serving / process lifecycle glue 범위에서 닫고, 실제 MJPEG frame delivery 와 WebSocket control session 은 M5/M6 로 넘긴다.
+
+
+## 12. 2026-04-13 M5 MJPEG stream completion
+
+M5에서 M4 HTTP skeleton 위에 실제 MJPEG stream delivery 를 연결했다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/extended_gaussian/renderer/server/CMakeLists.txt`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.cpp`
+- `src/projects/extended_gaussian/renderer/server/JpegEncoder.hpp`
+- `src/projects/extended_gaussian/renderer/server/JpegEncoder.cpp`
+- `src/projects/extended_gaussian/renderer/server/MjpegStreamer.hpp`
+- `src/projects/extended_gaussian/renderer/server/MjpegStreamer.cpp`
+- `docs/extended_gaussian_develop_ubuntu24_remote_browser_stream_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_manual_checklist_ko.md`
+- `src/projects/extended_gaussian/renderer/server/www/README.md`
+
+적용한 변경:
+
+- `JpegEncoder` 를 추가해 JPEG backend 를 `TurboJPEG` 또는 `OpenCV` 로 분리했다.
+- `MjpegStreamer` 를 추가해 PBO readback, latest-only raw queue, encoder worker, latest encoded frame fan-out 을 구현했다.
+- `RemoteStreamServer` 가 `/stream.mjpg` 를 실제 multipart MJPEG 로 응답하도록 구현했다.
+- `RemoteStreamServer` stop path 가 accept loop / client sessions / encoder wait 를 정리하도록 lifetime 을 다시 맞췄다.
+- `/healthz` 에 stream metrics 와 JPEG backend 이름을 노출했다.
+- `main.cpp` 에서 `viewer.onRender(window)` 직후 `"Gaussian View"` render target 을 capture source 로 submit 하도록 연결했다.
+- `--headless --server` 를 long-running offscreen server mode 로 사용하도록 정리했다.
+- `--server --path <model_dir>` 조합이면 GUI import 없이 모델을 자동 로드하도록 추가했다.
+- M5 상태에 맞게 branch log / manual checklist / `www/README` 를 갱신했다.
+
+검증 결과:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --install build-ninja` 는 현재 환경의 기존 `mrf` 산출물 누락으로 실패
+- build-tree executable + explicit `LD_LIBRARY_PATH` 로 runtime smoke 수행
+- `--headless --server --path ../gaussian-splatting/eval/bonsai` startup 통과
+- `/healthz`: `200 OK`, `version=m5-mjpeg-stream`, `jpeg_backend=OpenCV`, stream metrics 확인
+- `/stream.mjpg` single client: `200 OK`, multipart boundary 확인, 29개 JPEG part 수신 확인
+- `/stream.mjpg` two clients: 두 클라이언트 모두 `200 OK`, 각 39개 JPEG part 수신 확인, live `active_clients=2` 확인
+- `/`: `200 OK`
+- `/control`: `426 Upgrade Required`
+- `HEAD /stream.mjpg`: `200 OK`, multipart content-type 확인
+- `Ctrl+C` 종료 시 `RemoteStreamServer stop elapsed: ... sec` 와 exit code `0` 확인
+
+이 시점 기준 M5는 actual MJPEG transport / multi-client fan-out / no-display runtime smoke 범위에서 닫고, WebSocket control wiring 과 browser UX hardening 은 M6 이후로 넘긴다.

@@ -1,7 +1,7 @@
 # Remote Browser Stream Manual Checklist
 
 작성일: 2026-04-08  
-적용 시점: `/`, `/stream.mjpg`, `/control`가 실제로 연결된 이후
+적용 시점: M5에서 `/stream.mjpg`가 실제로 연결된 이후. `/control` WebSocket 적용 항목은 M6 이후에 사용한다.
 
 ## 1. 목적
 
@@ -16,10 +16,10 @@
 검증 전에 아래 조건을 먼저 맞춘다.
 
 - headless 또는 onscreen renderer가 실제 프레임을 생성할 수 있어야 한다.
-- HTTP endpoint가 최소 `/`와 `/stream.mjpg`를 제공해야 한다.
-- WebSocket endpoint가 `/control`에 열려 있어야 한다.
-- viewer 또는 camera handler와 remote control 적용 경로가 실제로 연결되어 있어야 한다.
-- 테스트용 payload 샘플이 준비되어 있어야 한다.
+- M5 기준으로는 HTTP endpoint가 최소 `/`, `/stream.mjpg`, `/healthz`를 제공해야 한다.
+- M6 이후에는 WebSocket endpoint가 `/control`에 실제로 열려 있어야 한다.
+- M6 이후에는 viewer 또는 camera handler와 remote control 적용 경로가 실제로 연결되어 있어야 한다.
+- M6 검증 시에는 테스트용 payload 샘플이 준비되어 있어야 한다.
   - `src/projects/extended_gaussian/renderer/server/examples/control_messages/`
 
 ## 3. 기본 bring-up
@@ -28,7 +28,8 @@
 
 - 서버가 지정한 `listen_host` / `listen_port`로 실제 bind되는지 확인한다.
 - 프로세스 시작 직후 fatal exit 없이 유지되는지 확인한다.
-- startup log에 HTTP / WebSocket endpoint 정보가 남는지 확인한다.
+- startup log에 HTTP endpoint 정보가 남는지 확인한다.
+- M6 이후에는 WebSocket endpoint 정보도 함께 확인한다.
 
 ### 3.2 health / static asset
 
@@ -55,7 +56,13 @@
 - 브라우저 탭 새로고침 후 스트림이 다시 붙는지 확인한다.
 - 스트림 연결을 여러 번 열고 닫아도 서버가 누수 없이 유지되는지 확인한다.
 
-## 5. WebSocket control
+### 4.4 health / metrics sanity
+
+- `/healthz`의 `stream.active_clients`가 실제 연결 수와 맞는지 확인한다.
+- `/healthz`의 `frames_captured`, `frames_published`, `latest_sequence`가 스트림 수신 중 증가하는지 확인한다.
+- single client와 two-client 상황 모두에서 metrics가 비정상적으로 멈추지 않는지 확인한다.
+
+## 5. WebSocket control (M6 이후)
 
 ### 5.1 연결 / 해제
 
@@ -110,8 +117,15 @@
 
 최소 pass 기준은 다음과 같다.
 
+### M5 minimum pass
+
 - `/stream.mjpg`가 실제로 갱신되는 프레임을 내보낸다.
+- single client와 two-client 연결 모두에서 multipart JPEG part가 반복 수신된다.
+- `/healthz`의 stream metrics가 실제 연결 수와 frame publish 진행을 반영한다.
+- 재연결과 장시간 연결에서 즉시 crash 또는 hang가 없다.
+
+### M6 additional pass
+
 - `/control` WebSocket 연결/해제가 안정적으로 동작한다.
 - 정상 payload는 camera update로 이어진다.
 - 실패 payload는 camera state를 바꾸지 않고 거부된다.
-- 재연결과 장시간 연결에서 즉시 crash 또는 hang가 없다.

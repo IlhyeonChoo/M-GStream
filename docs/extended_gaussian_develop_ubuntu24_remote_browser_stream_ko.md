@@ -578,3 +578,111 @@ M4 completion report:
 - M4는 viewer 와 renderer/server 사이에 최소한의 runtime glue 를 연결해, no-display viewer process 위에 HTTP skeleton 을 올리는 단계로 닫는다.
 - 이 단계에서 브라우저 reference client 와 health endpoint 는 실제로 동작한다.
 - 실제 스트림 frame delivery 와 WebSocket control 은 M5/M6 로 넘긴다.
+
+
+## 14. 2026-04-13 M5 MJPEG stream 구현 및 smoke 검증 완료
+
+M5에서는 M4의 HTTP skeleton 위에 실제 MJPEG frame delivery 경로를 연결했다.
+이 단계에서 `/stream.mjpg` 는 placeholder 가 아니라 실제 multipart JPEG stream 을 내보내며, same-process server thread 와 render loop 사이에 latest-only frame pipeline 이 추가되었다.
+
+핵심 구현 범위:
+
+- `renderer/server/JpegEncoder.*` 신규 추가
+  - JPEG encoder backend 를 분리했다.
+  - `TurboJPEG` 가 있으면 우선 사용하고, 현재 Ubuntu 24.04 작업 환경처럼 미설치 상태에서는 `OpenCV imencode(.jpg)` fallback 으로 동작한다.
+- `renderer/server/MjpegStreamer.*` 신규 추가
+  - render thread 에서 `IRenderTarget` 을 PBO ring 으로 비동기 readback
+  - latest-only raw queue + encoder worker thread
+  - resize 후 JPEG encode
+  - latest encoded frame 을 stream clients 에 fan-out
+- `renderer/server/RemoteStreamServer.*`
+  - `/stream.mjpg` GET/HEAD 구현
+  - client session thread model 추가
+  - `/healthz` 에 stream metrics (`active_clients`, `frames_captured`, `frames_published`, `latest_sequence`, `jpeg_backend`) 노출
+  - stop 시 accept loop / client sessions / encoder wait 가 함께 정리되도록 lifetime 정리
+- `apps/extended_gaussianViewer/main.cpp`
+  - `viewer.onRender(window)` 직후 `viewer.getGaussianViewRenderTarget()` 를 source 로 MJPEG capture submit
+  - shutdown 시 current GL context 아래에서 `releaseRenderThreadResources()` 를 먼저 호출한 뒤 `server->stop()` 하도록 유지
+  - `--headless --server` 는 더 이상 finite snapshot mode 가 아니라 offscreen no-GUI long-running server mode 로 동작
+  - `--server --path <model_dir>` 조합일 때 GUI import 없이 model directory 를 자동 load 하도록 추가
+- `ExtendedGaussianViewer.*`
+  - M4에서 추가한 read-only getters 를 그대로 사용하고, capture source 는 계속 `"Gaussian View"` render target 으로 고정
+- `renderer/server/CMakeLists.txt`
+  - M5 source files (`JpegEncoder`, `MjpegStreamer`) 를 `extended_gaussian_server` target 에 추가
+  - configure summary 에 JPEG backend probe 결과를 남김
+
+검증 명령:
+
+```bash
+cmake --build build-ninja --target extended_gaussianViewer_app --parallel
+LD_LIBRARY_PATH="$(find build-ninja -type f -name '*.so*' | sed 's#/[^/]*$##' | sort -u | paste -sd:):install/bin:install/lib" ./build-ninja/src/projects/extended_gaussian/apps/extended_gaussianViewer/extended_gaussianViewer_app   --headless --server   --listen-host 127.0.0.1   --listen-port 18080   --render-width 640 --render-height 360   --stream-width 640 --stream-height 360 --stream-fps 5   --path ../gaussian-splatting/eval/bonsai
+curl -sS http://127.0.0.1:18080/healthz
+curl -sS --max-time 6 -D /tmp/eg-m5-one.headers http://127.0.0.1:18080/stream.mjpg -o /tmp/eg-m5-one.mjpg
+curl -sS --max-time 8 -D /tmp/eg-m5-c1.headers http://127.0.0.1:18080/stream.mjpg -o /tmp/eg-m5-c1.mjpg &
+curl -sS --max-time 8 -D /tmp/eg-m5-c2.headers http://127.0.0.1:18080/stream.mjpg -o /tmp/eg-m5-c2.mjpg &
+curl -sS http://127.0.0.1:18080/healthz
+curl -sS -o /dev/null -w 'root=%{http_code}
+' http://127.0.0.1:18080/
+curl -sS -o /dev/null -w 'control=%{http_code}
+' http://127.0.0.1:18080/control
+curl -sSI http://127.0.0.1:18080/stream.mjpg
+```
+
+실제 검증 결과:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --install build-ninja` 는 현재 환경의 기존 `mrf` 산출물 누락 때문에 실패
+  - `extlibs/mrf/build/libmrf_rwdi.so` missing
+  - M5 runtime smoke 는 build-tree binary + explicit `LD_LIBRARY_PATH` 로 수행
+- no-display startup 통과
+  - `Initialization of direct headless EGL`
+  - `GaussianView CUDA/GL interop enabled.`
+  - `Loading 1076487 Gaussians (SH Degree: 3)`
+  - `RemoteStreamServer listening on 127.0.0.1:18080 ... JPEG backend: OpenCV`
+- `/healthz`:
+  - `200 OK`
+  - `version=m5-mjpeg-stream`
+  - `jpeg_backend=OpenCV`
+  - `stream.width=640`, `stream.height=360`, `stream.fps=5`
+- single-client `/stream.mjpg` smoke:
+  - `200 OK`
+  - `Content-Type: multipart/x-mixed-replace; boundary=ExGaussBoundary`
+  - 6초 수신 결과 `boundary=29`, `jpeg=29`, `bytes=1218803`
+  - `X-Sequence` 가 `1..10...` 으로 증가함을 확인
+- two-client concurrent smoke:
+  - 두 클라이언트 모두 `200 OK` + same boundary
+  - 각 클라이언트에서 `boundary=39`, `jpeg=39`, `bytes=1639092`
+  - live `/healthz` 에서 `active_clients=2`, `frames_captured=40`, `frames_published=40`, `latest_sequence=40` 확인
+- 기존 M4 contract regression check:
+  - `/`: `200 OK`
+  - `/control`: `426 Upgrade Required`
+  - `HEAD /stream.mjpg`: `200 OK`, multipart content-type
+- shutdown smoke:
+  - `Ctrl+C` 후 `RemoteStreamServer stop elapsed: 0.0053944 sec`
+  - exit code `0`
+
+M5 completion report:
+
+```text
+- milestone: M5 MJPEG stream
+- render source: "Gaussian View" render target, post-render pre-swap capture
+- no-display startup: pass (direct EGL + headless + server)
+- model bootstrap for server mode: pass (--server --path auto-load)
+- /healthz: pass with stream metrics
+- /stream.mjpg: pass (single client)
+- /stream.mjpg concurrent clients: pass (2 clients)
+- /, static assets: pass
+- /control: still placeholder 426 Upgrade Required
+- shutdown via signal: pass
+- deferred scope:
+  - WebSocket upgrade and control session handling
+  - remote camera application into viewer/update loop
+  - JPEG backend hard requirement policy finalization
+  - browser-side UX hardening / reconnect policy
+```
+
+정리:
+
+- M5는 M4 skeleton 위에 실제 MJPEG frame transport 를 얹는 단계로 닫는다.
+- 이 시점부터 no-display Ubuntu process 하나만으로 실제 Gaussian scene 을 브라우저로 스트리밍할 수 있다.
+- remote control 적용은 M6에서 별도 lifecycle 로 연결한다.

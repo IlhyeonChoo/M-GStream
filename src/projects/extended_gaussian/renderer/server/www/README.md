@@ -1,16 +1,16 @@
 # Remote Stream Reference Client
 
-This directory contains a protocol-reference browser client for the future Ubuntu remote browser stream mode.
-It is intentionally not wired into the runtime yet.
+This directory contains the browser client assets used by the Ubuntu remote browser stream mode.
+As of M4/M5, these files are installed and served by the runtime HTTP server.
 
 ## Scope
 
 The current assets are meant to document and exercise the shared contract, not to serve as the final product UI.
 
-They assume a future server will expose:
+The current runtime exposes:
 
-- `/stream.mjpg`
-- `/control`
+- `/stream.mjpg` as an actual multipart MJPEG stream in M5
+- `/control` as a placeholder HTTP 426 response until M6
 
 ## Files
 
@@ -34,10 +34,10 @@ This directory does not yet provide:
 - production UI flows
 - authentication
 - reconnect/backoff policy
-- runtime packaging/install integration
 - guarantees about the final browser UX
+- completed WebSocket control wiring before M6
 
 ## Change Guidance
 
-While this branch is still in the contract-first stage, prefer adding notes or separate documentation over heavily rewriting the HTML/CSS/JS.
-Once a later branch promotes these files into actual shipped assets, that branch can revise the UI with the runtime context in hand.
+These assets are now shipped as part of the server install tree, but they still serve as a thin reference client rather than the final product UX.
+For M5, prefer narrow changes that preserve the current MJPEG/control contract. Larger UX changes should land with the later runtime control work.

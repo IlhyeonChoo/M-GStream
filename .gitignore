@@ -11,6 +11,7 @@ cmake-gui.exe.stackdump
 __pycache__/
 plan
 swaptest
+docs/diff
 
 # emacs garbage
 \#*

@@ -54,6 +54,7 @@ namespace sibr {
 		const RenderingSystem* getRenderingSystem() const;
 		bool loadModelDirectoryAsInstance(const std::string& modelPath);
 		bool captureGaussianViewSnapshot(const std::string& snapshotPath);
+		const RenderTargetRGB* getGaussianViewRenderTarget() const;
 		bool isStreamingIdle() const;
 		double getAppTimeSeconds() const;
 		uint64_t getFrameIndex() const;

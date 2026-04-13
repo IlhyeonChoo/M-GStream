@@ -396,6 +396,15 @@ namespace sibr {
 		return boost::filesystem::exists(boost::filesystem::path(directory) / fileName);
 	}
 
+	const RenderTargetRGB* ExtendedGaussianViewer::getGaussianViewRenderTarget() const
+	{
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end() || !viewIt->second.rt) {
+			return nullptr;
+		}
+		return viewIt->second.rt.get();
+	}
+
 	bool ExtendedGaussianViewer::isStreamingIdle() const
 	{
 		const RenderingSystem* renderingSystem = getRenderingSystem();

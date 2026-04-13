@@ -4,6 +4,10 @@ set(SERVER_SOURCES
     CameraPoseAdapter.cpp
     CameraPoseAdapter.hpp
     Config.hpp
+    JpegEncoder.cpp
+    JpegEncoder.hpp
+    MjpegStreamer.cpp
+    MjpegStreamer.hpp
     RemoteStreamServer.cpp
     RemoteStreamServer.hpp
     ServerProtocol.cpp
@@ -25,7 +29,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(${PROJECT_NAME} PUBLIC
+    ${OpenCV_LIBRARIES}
     sibr_assets
+    sibr_graphics
     sibr_system
 )
 target_compile_definitions(${PROJECT_NAME} PUBLIC
@@ -46,7 +52,10 @@ message(STATUS "extended_gaussian_server HTTP/WebSocket backend: Boost.Beast")
 find_path(TURBOJPEG_INCLUDE_DIR NAMES turbojpeg.h)
 find_library(TURBOJPEG_LIBRARY NAMES turbojpeg libturbojpeg)
 if(TURBOJPEG_INCLUDE_DIR AND TURBOJPEG_LIBRARY)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${TURBOJPEG_INCLUDE_DIR})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${TURBOJPEG_LIBRARY})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE=1)
     message(STATUS "extended_gaussian_server JPEG backend: TurboJPEG found (${TURBOJPEG_LIBRARY})")
 else()
-    message(WARNING "extended_gaussian_server JPEG backend: TurboJPEG not found. M5 will require TurboJPEG for MJPEG encoding.")
+    message(WARNING "extended_gaussian_server JPEG backend: TurboJPEG not found. Falling back to OpenCV JPEG encoding for M5.")
 endif()

@@ -7,6 +7,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -24,6 +25,7 @@
 
 namespace beast = boost::beast;
 namespace http = beast::http;
+namespace websocket = beast::websocket;
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 namespace fs = std::filesystem;
@@ -31,7 +33,7 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr const char* kServiceName = "extended_gaussian_remote_stream";
-constexpr const char* kVersionName = "m5-mjpeg-stream";
+constexpr const char* kVersionName = "m6-websocket-control";
 constexpr const char* kMjpegBoundary = "ExGaussBoundary";
 constexpr auto kAcceptSleep = std::chrono::milliseconds(25);
 constexpr auto kStreamWait = std::chrono::milliseconds(250);
@@ -45,6 +47,14 @@ struct StreamClientSession {
     std::shared_ptr<tcp::socket> socket;
     std::atomic<bool> stop_requested{ false };
     std::atomic<bool> finished{ false };
+    std::thread thread;
+};
+
+struct ControlClientSession {
+    std::atomic<bool> stop_requested{ false };
+    std::atomic<bool> finished{ false };
+    std::mutex socket_mutex;
+    tcp::socket* socket = nullptr;
     std::thread thread;
 };
 
@@ -227,6 +237,30 @@ std::string jpegBackendName()
 #endif
 }
 
+std::string vector3Json(const sibr::Vector3f& value)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream << "[" << value.x() << "," << value.y() << "," << value.z() << "]";
+    return stream.str();
+}
+
+std::string cameraPoseJson(const sibr::RemoteCameraPose& pose)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream
+        << "{"
+        << "\"position\":" << vector3Json(pose.position) << ","
+        << "\"forward\":" << vector3Json(pose.forward) << ","
+        << "\"up\":" << vector3Json(pose.up) << ","
+        << "\"fovy\":" << pose.fovy
+        << "}";
+    return stream.str();
+}
+
 std::string healthJson(
     const sibr::ServerStats& stats,
     const sibr::RendererHealthSnapshot& renderer,
@@ -259,12 +293,83 @@ std::string healthJson(
         << "    \"height\": " << stats.stream_height << ",\n"
         << "    \"fps\": " << stats.stream_fps << "\n"
         << "  },\n"
+        << "  \"control\": {\n"
+        << "    \"websocket_path\": \"/control\",\n"
+        << "    \"queue_mode\": \"latest_only\",\n"
+        << "    \"active_clients\": " << stats.active_control_clients << ",\n"
+        << "    \"messages_received\": " << stats.control_messages_received << ",\n"
+        << "    \"messages_queued\": " << stats.control_messages_queued << ",\n"
+        << "    \"messages_rejected\": " << stats.control_messages_rejected << ",\n"
+        << "    \"messages_superseded\": " << stats.control_messages_superseded << ",\n"
+        << "    \"messages_applied\": " << stats.control_messages_applied << ",\n"
+        << "    \"apply_failures\": " << stats.control_apply_failures << ",\n"
+        << "    \"latest_received_sequence\": " << stats.control_latest_received_sequence << ",\n"
+        << "    \"last_applied_sequence\": " << stats.control_last_applied_sequence << ",\n"
+        << "    \"message_pending\": " << (stats.control_message_pending ? "true" : "false") << "\n"
+        << "  },\n"
         << "  \"renderer\": {\n"
         << "    \"initialized\": " << (renderer.initialized ? "true" : "false") << ",\n"
         << "    \"has_manifest\": " << (renderer.has_manifest ? "true" : "false") << ",\n"
         << "    \"frame_index\": " << renderer.frame_index << ",\n"
-        << "    \"app_time_sec\": " << renderer.app_time_sec << "\n"
-        << "  }\n"
+        << "    \"app_time_sec\": " << renderer.app_time_sec << ",\n"
+        << "    \"camera_pose_available\": " << (renderer.has_camera_pose ? "true" : "false");
+    if (renderer.has_camera_pose) {
+        stream << ",\n    \"camera_pose\": " << cameraPoseJson(renderer.camera_pose);
+    }
+    stream
+        << "\n  }\n"
+        << "}";
+    return stream.str();
+}
+
+std::string controlReadyJson(const sibr::RendererHealthSnapshot& renderer)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream
+        << "{"
+        << "\"ok\":true,"
+        << "\"type\":\"ready\","
+        << "\"service\":\"" << kServiceName << "\","
+        << "\"version\":\"" << kVersionName << "\","
+        << "\"queue_mode\":\"latest_only\","
+        << "\"control_path\":\"/control\","
+        << "\"camera_pose_available\":" << (renderer.has_camera_pose ? "true" : "false");
+    if (renderer.has_camera_pose) {
+        stream << ",\"camera_pose\":" << cameraPoseJson(renderer.camera_pose);
+    }
+    stream
+        << ",\"frame_index\":" << renderer.frame_index
+        << ",\"app_time_sec\":" << renderer.app_time_sec
+        << "}";
+    return stream.str();
+}
+
+std::string controlAckJson(uint64_t sequence, bool superseded_previous)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"ok\":true,"
+        << "\"type\":\"ack\","
+        << "\"request_type\":\"set_camera_pose\","
+        << "\"status\":\"queued\","
+        << "\"queue_mode\":\"latest_only\","
+        << "\"sequence\":" << sequence << ","
+        << "\"superseded_previous\":" << (superseded_previous ? "true" : "false")
+        << "}";
+    return stream.str();
+}
+
+std::string controlErrorJson(const std::string& error)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"ok\":false,"
+        << "\"type\":\"error\","
+        << "\"error\":\"" << jsonEscape(error) << "\""
         << "}";
     return stream.str();
 }
@@ -298,6 +403,13 @@ std::string mjpegPartHeader(const sibr::MjpegStreamer::EncodedFrame& frame)
     return stream.str();
 }
 
+bool writeWebSocketText(websocket::stream<tcp::socket>& stream, const std::string& payload, beast::error_code& ec)
+{
+    stream.text(true);
+    stream.write(asio::buffer(payload), ec);
+    return !ec;
+}
+
 void closeSocket(tcp::socket& socket)
 {
     beast::error_code ec;
@@ -315,6 +427,8 @@ public:
     std::unique_ptr<tcp::acceptor> acceptor;
     std::mutex stream_sessions_mutex;
     std::vector<std::unique_ptr<StreamClientSession>> stream_sessions;
+    std::mutex control_sessions_mutex;
+    std::vector<std::unique_ptr<ControlClientSession>> control_sessions;
 };
 
 RemoteStreamServer::RemoteStreamServer(ServerOptions options)
@@ -387,6 +501,11 @@ bool RemoteStreamServer::start(std::string& error)
     stop_requested_.store(false);
     running_.store(true);
     start_time_ = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(control_message_mutex_);
+        pending_control_message_.reset();
+        next_control_sequence_ = 1;
+    }
 
     {
         std::lock_guard<std::mutex> lock(stats_mutex_);
@@ -404,6 +523,16 @@ bool RemoteStreamServer::start(std::string& error)
         stats_.stream_width = options_.stream_width;
         stats_.stream_height = options_.stream_height;
         stats_.stream_fps = options_.stream_fps;
+        stats_.active_control_clients = 0;
+        stats_.control_messages_received = 0;
+        stats_.control_messages_queued = 0;
+        stats_.control_messages_rejected = 0;
+        stats_.control_messages_superseded = 0;
+        stats_.control_messages_applied = 0;
+        stats_.control_apply_failures = 0;
+        stats_.control_latest_received_sequence = 0;
+        stats_.control_last_applied_sequence = 0;
+        stats_.control_message_pending = false;
     }
 
     try {
@@ -413,6 +542,10 @@ bool RemoteStreamServer::start(std::string& error)
             mjpeg_streamer_->stop();
             mjpeg_streamer_.reset();
         }
+        {
+            std::lock_guard<std::mutex> lock(control_message_mutex_);
+            pending_control_message_.reset();
+        }
         if (impl_) {
             impl_->acceptor.reset();
             impl_->io_context.reset();
@@ -421,15 +554,19 @@ bool RemoteStreamServer::start(std::string& error)
         {
             std::lock_guard<std::mutex> lock(stats_mutex_);
             stats_.running = false;
+            stats_.active_stream_clients = 0;
+            stats_.active_control_clients = 0;
+            stats_.control_message_pending = false;
         }
         error = std::string("Failed to start server thread: ") + exception.what();
         return false;
     }
 
     SIBR_LOG << "RemoteStreamServer listening on "
-        << options_.listen_host << ":" << options_.listen_port
-        << " (www root: " << www_root_ << ", JPEG backend: " << jpegBackendName() << ")" << std::endl;
-    SIBR_WRG << "RemoteStreamServer does not provide auth or TLS in M5. Avoid binding it to the public internet." << std::endl;
+             << options_.listen_host << ":" << options_.listen_port
+             << " (www root: " << www_root_ << ", JPEG backend: " << jpegBackendName() << ")" << std::endl;
+    SIBR_WRG << "RemoteStreamServer does not provide auth or TLS in M6. Avoid binding it to the public internet."
+             << std::endl;
     error.clear();
     return true;
 }
@@ -445,6 +582,20 @@ void RemoteStreamServer::stop()
                 continue;
             }
             session->stop_requested.store(true);
+            if (session->socket && session->socket->is_open()) {
+                closeSocket(*session->socket);
+            }
+        }
+    }
+
+    if (impl_) {
+        std::lock_guard<std::mutex> lock(impl_->control_sessions_mutex);
+        for (const auto& session : impl_->control_sessions) {
+            if (!session) {
+                continue;
+            }
+            session->stop_requested.store(true);
+            std::lock_guard<std::mutex> socket_lock(session->socket_mutex);
             if (session->socket && session->socket->is_open()) {
                 closeSocket(*session->socket);
             }
@@ -467,18 +618,45 @@ void RemoteStreamServer::stop()
     }
 
     if (impl_) {
-        std::vector<std::unique_ptr<StreamClientSession>> sessions_to_join;
+        std::vector<std::unique_ptr<StreamClientSession>> stream_sessions_to_join;
         {
             std::lock_guard<std::mutex> lock(impl_->stream_sessions_mutex);
-            sessions_to_join.swap(impl_->stream_sessions);
+            stream_sessions_to_join.swap(impl_->stream_sessions);
         }
-        for (auto& session : sessions_to_join) {
+        for (auto& session : stream_sessions_to_join) {
             if (session && session->thread.joinable()) {
                 session->thread.join();
             }
         }
+
+        std::vector<std::unique_ptr<ControlClientSession>> control_sessions_to_join;
+        {
+            std::lock_guard<std::mutex> lock(impl_->control_sessions_mutex);
+            control_sessions_to_join.swap(impl_->control_sessions);
+        }
+        for (auto& session : control_sessions_to_join) {
+            if (!session) {
+                continue;
+            }
+            session->stop_requested.store(true);
+            {
+                std::lock_guard<std::mutex> socket_lock(session->socket_mutex);
+                if (session->socket && session->socket->is_open()) {
+                    closeSocket(*session->socket);
+                }
+            }
+            if (session->thread.joinable()) {
+                session->thread.join();
+            }
+        }
+
         impl_->acceptor.reset();
         impl_->io_context.reset();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(control_message_mutex_);
+        pending_control_message_.reset();
     }
 
     if (mjpeg_streamer_) {
@@ -489,6 +667,8 @@ void RemoteStreamServer::stop()
         std::lock_guard<std::mutex> lock(stats_mutex_);
         stats_.running = false;
         stats_.active_stream_clients = 0;
+        stats_.active_control_clients = 0;
+        stats_.control_message_pending = false;
     }
     running_.store(false);
 }
@@ -518,6 +698,71 @@ void RemoteStreamServer::releaseRenderThreadResources()
         return;
     }
     mjpeg_streamer_->releaseRenderThreadResources();
+}
+
+bool RemoteStreamServer::consumePendingControlMessage(ControlMessage& message, uint64_t& sequence)
+{
+    bool has_message = false;
+    {
+        std::lock_guard<std::mutex> lock(control_message_mutex_);
+        if (pending_control_message_) {
+            sequence = pending_control_message_->sequence;
+            message = pending_control_message_->message;
+            pending_control_message_.reset();
+            has_message = true;
+        }
+    }
+    if (has_message) {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        stats_.control_message_pending = false;
+    }
+    return has_message;
+}
+
+void RemoteStreamServer::recordControlMessageApplied(uint64_t sequence, bool applied)
+{
+    std::lock_guard<std::mutex> lock(stats_mutex_);
+    if (applied) {
+        ++stats_.control_messages_applied;
+        stats_.control_last_applied_sequence = sequence;
+    } else {
+        ++stats_.control_apply_failures;
+    }
+}
+
+bool RemoteStreamServer::enqueueLatestControlMessage(
+    const ControlMessage& message,
+    uint64_t& sequence,
+    bool& superseded_previous,
+    std::string& error)
+{
+    if (!running()) {
+        error = "Remote stream server is not running.";
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(control_message_mutex_);
+        superseded_previous = pending_control_message_.has_value();
+        PendingControlMessage pending;
+        pending.sequence = next_control_sequence_++;
+        pending.message = message;
+        sequence = pending.sequence;
+        pending_control_message_ = pending;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        ++stats_.control_messages_queued;
+        if (superseded_previous) {
+            ++stats_.control_messages_superseded;
+        }
+        stats_.control_latest_received_sequence = sequence;
+        stats_.control_message_pending = true;
+    }
+
+    error.clear();
+    return true;
 }
 
 RendererHealthSnapshot RemoteStreamServer::rendererHealthSnapshot() const
@@ -586,7 +831,7 @@ void RemoteStreamServer::serverThreadMain()
     try {
         while (!stop_requested_.load()) {
             if (impl_) {
-                std::vector<std::unique_ptr<StreamClientSession>> sessions_to_join;
+                std::vector<std::unique_ptr<StreamClientSession>> stream_sessions_to_join;
                 {
                     std::lock_guard<std::mutex> lock(impl_->stream_sessions_mutex);
                     auto it = impl_->stream_sessions.begin();
@@ -596,11 +841,31 @@ void RemoteStreamServer::serverThreadMain()
                             ++it;
                             continue;
                         }
-                        sessions_to_join.push_back(std::move(*it));
+                        stream_sessions_to_join.push_back(std::move(*it));
                         it = impl_->stream_sessions.erase(it);
                     }
                 }
-                for (auto& session : sessions_to_join) {
+                for (auto& session : stream_sessions_to_join) {
+                    if (session && session->thread.joinable()) {
+                        session->thread.join();
+                    }
+                }
+
+                std::vector<std::unique_ptr<ControlClientSession>> control_sessions_to_join;
+                {
+                    std::lock_guard<std::mutex> lock(impl_->control_sessions_mutex);
+                    auto it = impl_->control_sessions.begin();
+                    while (it != impl_->control_sessions.end()) {
+                        const bool should_join = (*it == nullptr) || (*it)->finished.load();
+                        if (!should_join) {
+                            ++it;
+                            continue;
+                        }
+                        control_sessions_to_join.push_back(std::move(*it));
+                        it = impl_->control_sessions.erase(it);
+                    }
+                }
+                for (auto& session : control_sessions_to_join) {
                     if (session && session->thread.joinable()) {
                         session->thread.join();
                     }
@@ -642,19 +907,20 @@ void RemoteStreamServer::serverThreadMain()
             }
 
             const bool is_head = request.method() == http::verb::head;
-            auto write_string_response = [&](http::status status, const std::string& content_type, const std::string& body) {
-                beast::error_code write_error;
-                if (is_head) {
-                    auto response = makeHeadResponse(status, content_type, body.size());
-                    http::write(socket, response, write_error);
-                } else {
-                    auto response = makeTextResponse(status, content_type, body);
-                    http::write(socket, response, write_error);
-                }
-                if (write_error) {
-                    SIBR_WRG << "RemoteStreamServer HTTP write failed: " << write_error.message() << std::endl;
-                }
-            };
+            auto write_string_response =
+                [&](http::status status, const std::string& content_type, const std::string& body) {
+                    beast::error_code write_error;
+                    if (is_head) {
+                        auto response = makeHeadResponse(status, content_type, body.size());
+                        http::write(socket, response, write_error);
+                    } else {
+                        auto response = makeTextResponse(status, content_type, body);
+                        http::write(socket, response, write_error);
+                    }
+                    if (write_error) {
+                        SIBR_WRG << "RemoteStreamServer HTTP write failed: " << write_error.message() << std::endl;
+                    }
+                };
 
             if (request.method() != http::verb::get && !is_head) {
                 auto response = makeTextResponse(
@@ -748,23 +1014,159 @@ void RemoteStreamServer::serverThreadMain()
             }
 
             if (target == "/control") {
-                beast::error_code write_error;
-                if (is_head) {
-                    auto response = makeHeadResponse(http::status::upgrade_required, "application/json; charset=utf-8", 0);
-                    response.set(http::field::upgrade, "websocket");
-                    http::write(socket, response, write_error);
-                } else {
-                    auto response = makeTextResponse(
-                        http::status::upgrade_required,
-                        "application/json; charset=utf-8",
-                        "{\"ok\":false,\"error\":\"WebSocket control is not implemented in M5.\"}\n");
-                    response.set(http::field::upgrade, "websocket");
-                    http::write(socket, response, write_error);
+                if (!websocket::is_upgrade(request)) {
+                    beast::error_code write_error;
+                    if (is_head) {
+                        auto response = makeHeadResponse(http::status::upgrade_required, "application/json; charset=utf-8", 0);
+                        response.set(http::field::upgrade, "websocket");
+                        http::write(socket, response, write_error);
+                    } else {
+                        auto response = makeTextResponse(
+                            http::status::upgrade_required,
+                            "application/json; charset=utf-8",
+                            controlErrorJson("WebSocket upgrade required for /control."));
+                        response.set(http::field::upgrade, "websocket");
+                        http::write(socket, response, write_error);
+                    }
+                    if (write_error) {
+                        SIBR_WRG << "RemoteStreamServer HTTP write failed: " << write_error.message() << std::endl;
+                    }
+                    closeSocket(socket);
+                    continue;
                 }
-                if (write_error) {
-                    SIBR_WRG << "RemoteStreamServer HTTP write failed: " << write_error.message() << std::endl;
+
+                auto session = std::make_unique<ControlClientSession>();
+                ControlClientSession* const session_ptr = session.get();
+                session->thread = std::thread(
+                    [this,
+                     session_ptr,
+                     accepted_socket = std::move(socket),
+                     accepted_request = std::move(request)]() mutable {
+                        websocket::stream<tcp::socket> ws(std::move(accepted_socket));
+                        ws.set_option(websocket::stream_base::decorator([](websocket::response_type& response) {
+                            response.set(http::field::server, "extended_gaussian_server");
+                        }));
+                        {
+                            std::lock_guard<std::mutex> socket_lock(session_ptr->socket_mutex);
+                            session_ptr->socket = &ws.next_layer();
+                        }
+
+                        bool active_registered = false;
+                        auto finish = [&]() {
+                            {
+                                std::lock_guard<std::mutex> socket_lock(session_ptr->socket_mutex);
+                                session_ptr->socket = nullptr;
+                            }
+                            if (active_registered) {
+                                std::lock_guard<std::mutex> lock(stats_mutex_);
+                                if (stats_.active_control_clients > 0) {
+                                    --stats_.active_control_clients;
+                                }
+                            }
+                            session_ptr->finished.store(true);
+                        };
+
+                        beast::error_code ws_error;
+                        ws.accept(accepted_request, ws_error);
+                        if (ws_error) {
+                            SIBR_WRG << "RemoteStreamServer WebSocket accept failed: " << ws_error.message() << std::endl;
+                            finish();
+                            return;
+                        }
+
+                        {
+                            std::lock_guard<std::mutex> lock(stats_mutex_);
+                            ++stats_.active_control_clients;
+                        }
+                        active_registered = true;
+
+                        if (!writeWebSocketText(ws, controlReadyJson(rendererHealthSnapshot()), ws_error)) {
+                            if (ws_error != websocket::error::closed &&
+                                ws_error != asio::error::operation_aborted &&
+                                ws_error != asio::error::bad_descriptor &&
+                                ws_error != asio::error::eof) {
+                                SIBR_WRG << "RemoteStreamServer WebSocket ready write failed: " << ws_error.message() << std::endl;
+                            }
+                            beast::error_code close_error;
+                            ws.close(websocket::close_code::normal, close_error);
+                            finish();
+                            return;
+                        }
+
+                        while (!stop_requested_.load() && !session_ptr->stop_requested.load()) {
+                            beast::flat_buffer ws_buffer;
+                            ws_error.clear();
+                            ws.read(ws_buffer, ws_error);
+                            if (ws_error == websocket::error::closed || ws_error == asio::error::operation_aborted ||
+                                ws_error == asio::error::bad_descriptor || ws_error == asio::error::eof) {
+                                break;
+                            }
+                            if (ws_error) {
+                                SIBR_WRG << "RemoteStreamServer WebSocket read failed: " << ws_error.message() << std::endl;
+                                break;
+                            }
+
+                            {
+                                std::lock_guard<std::mutex> lock(stats_mutex_);
+                                ++stats_.control_messages_received;
+                            }
+
+                            std::string response_payload;
+                            if (ws.got_binary()) {
+                                {
+                                    std::lock_guard<std::mutex> lock(stats_mutex_);
+                                    ++stats_.control_messages_rejected;
+                                }
+                                response_payload = controlErrorJson("Binary WebSocket messages are not supported.");
+                                if (!writeWebSocketText(ws, response_payload, ws_error)) {
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            const std::string payload = beast::buffers_to_string(ws_buffer.data());
+                            const ParseControlMessageResult parsed = ParseControlMessageJson(payload);
+                            if (!parsed) {
+                                {
+                                    std::lock_guard<std::mutex> lock(stats_mutex_);
+                                    ++stats_.control_messages_rejected;
+                                }
+                                response_payload = controlErrorJson(parsed.error);
+                                if (!writeWebSocketText(ws, response_payload, ws_error)) {
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            uint64_t sequence = 0;
+                            bool superseded_previous = false;
+                            std::string enqueue_error;
+                            if (!enqueueLatestControlMessage(parsed.message, sequence, superseded_previous, enqueue_error)) {
+                                {
+                                    std::lock_guard<std::mutex> lock(stats_mutex_);
+                                    ++stats_.control_messages_rejected;
+                                }
+                                response_payload = controlErrorJson(enqueue_error);
+                                if (!writeWebSocketText(ws, response_payload, ws_error)) {
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            response_payload = controlAckJson(sequence, superseded_previous);
+                            if (!writeWebSocketText(ws, response_payload, ws_error)) {
+                                break;
+                            }
+                        }
+
+                        beast::error_code close_error;
+                        ws.close(websocket::close_code::normal, close_error);
+                        finish();
+                    });
+                {
+                    std::lock_guard<std::mutex> lock(impl_->control_sessions_mutex);
+                    impl_->control_sessions.push_back(std::move(session));
                 }
-                closeSocket(socket);
                 continue;
             }
 
@@ -815,12 +1217,12 @@ void RemoteStreamServer::serverThreadMain()
     }
 
     if (impl_) {
-        std::vector<std::unique_ptr<StreamClientSession>> sessions_to_join;
+        std::vector<std::unique_ptr<StreamClientSession>> stream_sessions_to_join;
         {
             std::lock_guard<std::mutex> lock(impl_->stream_sessions_mutex);
-            sessions_to_join.swap(impl_->stream_sessions);
+            stream_sessions_to_join.swap(impl_->stream_sessions);
         }
-        for (auto& session : sessions_to_join) {
+        for (auto& session : stream_sessions_to_join) {
             if (!session) {
                 continue;
             }
@@ -832,11 +1234,29 @@ void RemoteStreamServer::serverThreadMain()
                 session->thread.join();
             }
         }
+
+        std::vector<std::unique_ptr<ControlClientSession>> control_sessions_to_join;
+        {
+            std::lock_guard<std::mutex> lock(impl_->control_sessions_mutex);
+            control_sessions_to_join.swap(impl_->control_sessions);
+        }
+        for (auto& session : control_sessions_to_join) {
+            if (!session) {
+                continue;
+            }
+            session->stop_requested.store(true);
+            if (session->thread.joinable()) {
+                session->thread.join();
+            }
+        }
     }
 
     running_.store(false);
     std::lock_guard<std::mutex> lock(stats_mutex_);
     stats_.running = false;
+    stats_.active_stream_clients = 0;
+    stats_.active_control_clients = 0;
+    stats_.control_message_pending = false;
 }
 
 } // namespace sibr

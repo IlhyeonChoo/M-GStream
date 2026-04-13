@@ -10,6 +10,7 @@
 #include "projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp"
 #include "projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.hpp"
 #if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#include "projects/extended_gaussian/renderer/server/CameraPoseAdapter.hpp"
 #include "projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp"
 #include "projects/extended_gaussian/renderer/server/ServerProtocol.hpp"
 #endif
@@ -60,6 +61,13 @@ RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& 
     snapshot.has_manifest = rendering_system != nullptr && rendering_system->hasManifest();
     snapshot.frame_index = viewer.getFrameIndex();
     snapshot.app_time_sec = viewer.getAppTimeSeconds();
+
+    sibr::InputCamera gaussian_view_camera;
+    std::string camera_error;
+    if (viewer.tryGetGaussianViewCamera(gaussian_view_camera, camera_error)) {
+        snapshot.has_camera_pose = true;
+        snapshot.camera_pose = ExportRemoteCameraPose(gaussian_view_camera);
+    }
     return snapshot;
 }
 
@@ -69,6 +77,37 @@ void updateServerHealth(RemoteStreamServer* server, const ExtendedGaussianViewer
         return;
     }
     server->setRendererHealthSnapshot(makeRendererHealthSnapshot(viewer));
+}
+
+void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewer)
+{
+    if (!server) {
+        return;
+    }
+
+    ControlMessage message;
+    uint64_t sequence = 0;
+    if (!server->consumePendingControlMessage(message, sequence)) {
+        return;
+    }
+
+    bool applied = false;
+    std::string apply_error;
+    switch (message.type) {
+    case ControlMessageType::SetCameraPose: {
+        sibr::InputCamera camera;
+        if (viewer.tryGetGaussianViewCamera(camera, apply_error) &&
+            TryBuildInputCamera(message.camera_pose, camera, apply_error)) {
+            applied = viewer.applyGaussianViewCamera(camera, apply_error);
+        }
+        break;
+    }
+    }
+
+    if (!applied) {
+        SIBR_WRG << "Failed to apply remote control message seq=" << sequence << ": " << apply_error << std::endl;
+    }
+    server->recordControlMessageApplied(sequence, applied);
 }
 #endif
 
@@ -93,6 +132,9 @@ int runInteractive(
         }
 
         viewer.onUpdate(Input::global());
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+        pumpRemoteControl(server, viewer);
+#endif
         viewer.onRender(window);
 #if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
         if (server) {

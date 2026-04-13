@@ -396,6 +396,41 @@ namespace sibr {
 		return boost::filesystem::exists(boost::filesystem::path(directory) / fileName);
 	}
 
+	bool ExtendedGaussianViewer::tryGetGaussianViewCamera(sibr::InputCamera& camera, std::string& error) const
+	{
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			error = "Gaussian View camera is not available.";
+			return false;
+		}
+
+		if (const auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler)) {
+			camera = handler->getCamera();
+		} else {
+			camera = viewIt->second.cam;
+		}
+		error.clear();
+		return true;
+	}
+
+	bool ExtendedGaussianViewer::applyGaussianViewCamera(const sibr::InputCamera& camera, std::string& error)
+	{
+		auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			error = "Gaussian View camera is not available.";
+			return false;
+		}
+
+		if (auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler)) {
+			handler->fromCamera(camera, false, true);
+			viewIt->second.cam = handler->getCamera();
+		} else {
+			viewIt->second.cam = camera;
+		}
+		error.clear();
+		return true;
+	}
+
 	const RenderTargetRGB* ExtendedGaussianViewer::getGaussianViewRenderTarget() const
 	{
 		const auto viewIt = _ibrSubViews.find("Gaussian View");

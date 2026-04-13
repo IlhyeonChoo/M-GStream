@@ -12,6 +12,7 @@ set(WINDOWS_PORTABLE_DOC "${CMAKE_SOURCE_DIR}/docs/extended_gaussian_windows_por
 set(WINDOWS_PORTABLE_EXTRA_RUNTIME_FILES "")
 set(WINDOWS_PORTABLE_EXTRA_RUNTIME_IMPORTED_TARGETS "")
 set(WINDOWS_PORTABLE_EXTRA_RUNTIME_TARGETS "")
+set(LINUX_REMOTE_STREAM_RUNTIME_DIRS "")
 
 function(append_runtime_target_file_expr target_name files_var)
 	if(NOT TARGET ${target_name})
@@ -52,6 +53,9 @@ target_link_libraries(${PROJECT_NAME}
 if(TARGET extended_gaussian_server)
 	target_link_libraries(${PROJECT_NAME} extended_gaussian_server)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD=1)
+	if(SIBR_TURBOJPEG_LIBRARY_DIR)
+		list(APPEND LINUX_REMOTE_STREAM_RUNTIME_DIRS ${SIBR_TURBOJPEG_LIBRARY_DIR})
+	endif()
 endif()
 set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "projects/extended_gaussian/apps")
 
@@ -105,6 +109,7 @@ ibr_install_target(${PROJECT_NAME}
 	RESOURCES  	${RESOURCES}
 	SCRIPTS     ${WINDOWS_PORTABLE_SCRIPT} ${WINDOWS_PORTABLE_CHECK_SCRIPT}
 	RSC_FOLDER 	"extended_gaussian"
+	DIRS        ${LINUX_REMOTE_STREAM_RUNTIME_DIRS}
     STANDALONE  ${INSTALL_STANDALONE}   ## mean call install_runtime with bundle dependencies resolution
     COMPONENT   ${PROJECT_NAME}_install ## will create custom target to install only this project
 )
@@ -113,6 +118,23 @@ if(TARGET extended_gaussian_server)
 	install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/projects/extended_gaussian/renderer/server/www/
 		DESTINATION resources/extended_gaussian/server/www
 		COMPONENT ${PROJECT_NAME}_install
+	)
+
+	install(FILES
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so.0
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so.0.2.0
+		DESTINATION bin
+		COMPONENT ${PROJECT_NAME}_install
+		OPTIONAL
+	)
+	install(FILES
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so.0
+		${SIBR_TURBOJPEG_LIBRARY_DIR}/libturbojpeg.so.0.2.0
+		DESTINATION lib
+		COMPONENT ${PROJECT_NAME}_install
+		OPTIONAL
 	)
 endif()
 

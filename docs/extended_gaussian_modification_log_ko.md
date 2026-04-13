@@ -740,3 +740,63 @@ M3에서 `renderer/server` 관련 코드를 runtime feature 추가 없이 명시
 - install 결과에는 새 server runtime binary / `www` asset 이 추가되지 않음
 
 이 시점 기준 M3는 build graph / dependency policy / source ownership 정리 범위에서 닫고, runtime 연결은 M4 이후로 넘긴다.
+
+
+## 11. 2026-04-13 M4 HTTP skeleton completion
+
+M4에서 `extended_gaussianViewer_app` 와 `extended_gaussian_server` 를 실제 runtime 으로 연결하고, no-display viewer 위에서 동작하는 HTTP skeleton 을 구현했다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/CMakeLists.txt`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/CMakeLists.txt`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/extended_gaussian/renderer/server/CMakeLists.txt`
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.hpp`
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.cpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.cpp`
+
+적용한 변경:
+
+- `main.cpp` 에 remote-stream CLI surface 와 process signal handling 을 추가했다.
+- `main.cpp` 가 `RemoteStreamServer` 의 생성 / start / per-frame health publish / stop 을 직접 관리하도록 연결했다.
+- `--server --headless` 조합은 거부하고, 장기 실행 server 는 `--offscreen --nogui --server` 조합만 허용했다.
+- `ServerProtocol` 에 `--bind`, `--port`, `--www-root` 정규화를 추가했다.
+- `RemoteStreamServer` 를 신규 추가해 다음을 구현했다.
+  - dedicated server thread
+  - non-blocking accept loop
+  - `/healthz`
+  - `/`, `/index.html`, `/app.js`, `/styles.css`, `/static/*`
+  - `/stream.mjpg` placeholder 501
+  - `/control` placeholder 426 + `Upgrade: websocket`
+  - percent-decoding / path traversal 방어
+- `ExtendedGaussianViewer` 에 health snapshot 용 getter 를 추가했다.
+- `src/projects/extended_gaussian/CMakeLists.txt` 에서 `renderer` 를 `apps` 보다 먼저 add 하도록 순서를 바꿨다.
+  - 이유: app CMake 가 `extended_gaussian_server` target 을 볼 수 있어야 app link 와 compile definition 이 적용된다.
+- `apps/extended_gaussianViewer/CMakeLists.txt` 에서 app 이 `extended_gaussian_server` 를 link 하고 `SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD=1` compile definition 을 받도록 수정했다.
+- `www` install destination 을 `resources/extended_gaussian/server/www` 로 맞췄고, runtime lookup 도 같은 install path 를 우선 탐색하게 했다.
+
+검증 결과:
+
+- `cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc -DSIBR_BUILD_REMOTE_STREAM=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 통과
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- `./install/bin/extended_gaussianViewer_app --help` 에 server 관련 옵션 노출 확인
+- `./install/bin/extended_gaussianViewer_app --offscreen --nogui --server --listen-host 127.0.0.1 --listen-port 18080 --width 640 --height 360` 기동 통과
+  - startup log 에 `Initialization of direct headless EGL`
+  - startup log 에 `RemoteStreamServer listening on 127.0.0.1:18080`
+  - resolved `www root` 가 `install/resources/extended_gaussian/server/www` 로 잡힘
+- `curl` smoke
+  - `/healthz`: `200 OK`
+  - `/`: `200 OK`
+  - `/app.js`: `200 OK`
+  - `/styles.css`: `200 OK`
+  - `/static/app.js`: `200 OK`
+  - `/stream.mjpg`: `501 Not Implemented`
+  - `/control`: `426 Upgrade Required`
+- `Ctrl+C` 종료 후 `RemoteStreamServer stop elapsed: ... sec` 로그 및 exit code `0` 확인
+
+이 시점 기준 M4는 HTTP skeleton / static asset serving / process lifecycle glue 범위에서 닫고, 실제 MJPEG frame delivery 와 WebSocket control session 은 M5/M6 로 넘긴다.

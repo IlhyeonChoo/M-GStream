@@ -471,3 +471,110 @@ M3 completion report:
 
 - M3는 server parser/camera adapter 코드를 renderer 본체에서 분리해 명시적인 target ownership 으로 옮기는 단계다.
 - runtime 동작은 아직 바뀌지 않았고, 이후 M4에서 HTTP skeleton 을 연결하면 된다.
+
+
+## 13. 2026-04-13 M4 HTTP skeleton 구현 및 smoke 검증 완료
+
+M4에서는 `extended_gaussianViewer_app` 안에 `RemoteStreamServer` 를 연결해, no-display viewer 프로세스와 같은 수명주기로 동작하는 HTTP skeleton 을 추가했다.
+
+핵심 구현 범위:
+
+- `main.cpp`
+  - `--server`, `--listen-host`, `--listen-port`, `--bind`, `--port`, `--www-root` 와 M5 reserved stream 옵션을 app CLI surface 로 노출
+  - `ParseServerOptions(...)` 로 canonical `ServerOptions` 를 만들고, `--server --headless` 조합은 즉시 거부
+  - `RemoteStreamServer` 를 `main` 이 소유하고, viewer 생성 이후 start / loop 중 health publish / 종료 직후 stop 하도록 연결
+  - `SIGINT`, `SIGTERM` 을 받아 interactive loop 를 정상 종료
+- `renderer/server/ServerProtocol.*`
+  - `--bind` / `--port` alias 와 `--www-root` override 를 `ServerOptions` 로 정규화
+- `renderer/server/RemoteStreamServer.*` 신규 추가
+  - 별도 server thread 에서 non-blocking accept loop 운영
+  - `GET` / `HEAD` 만 허용하고, 나머지는 405 반환
+  - `/healthz` 200 JSON 구현
+  - `/`, `/index.html`, `/app.js`, `/styles.css`, `/static/*` 정적 자산 서빙 구현
+  - `/stream.mjpg` 는 501 placeholder, `/control` 은 426 Upgrade Required placeholder 구현
+  - percent-decoding + path traversal 방어 추가
+- `ExtendedGaussianViewer.*`
+  - M4 health snapshot 에 쓰기 위한 read-only getter (`getAppTimeSeconds`, `getFrameIndex`, `getCurrentPhase`) 노출
+- CMake / install wiring
+  - `src/projects/extended_gaussian/CMakeLists.txt` 에서 `renderer` 를 `apps` 보다 먼저 add 하도록 순서 수정
+    - 이유: app CMake 가 `extended_gaussian_server` target 존재를 볼 수 있어야 app link 와 compile definition 이 적용됨
+  - `apps/extended_gaussianViewer/CMakeLists.txt` 에서 app 이 `extended_gaussian_server` 를 link 하고 `SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD=1` 을 받도록 수정
+  - `www` install destination 을 `resources/extended_gaussian/server/www` 로 맞춤
+  - `RemoteStreamServer` 의 install lookup 경로도 `resources/extended_gaussian/server/www` 를 우선 탐색하도록 수정
+
+검증 명령:
+
+```bash
+cmake -S . -B build-ninja -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc \
+  -DSIBR_BUILD_REMOTE_STREAM=ON \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build-ninja --target extended_gaussianViewer_app --parallel
+cmake --build build-ninja --target install --parallel
+./install/bin/extended_gaussianViewer_app --help
+./install/bin/extended_gaussianViewer_app \
+  --offscreen --nogui --server \
+  --listen-host 127.0.0.1 \
+  --listen-port 18080 \
+  --width 640 --height 360
+curl -i http://127.0.0.1:18080/healthz
+curl -I http://127.0.0.1:18080/
+curl -I http://127.0.0.1:18080/app.js
+curl -I http://127.0.0.1:18080/styles.css
+curl -I http://127.0.0.1:18080/static/app.js
+curl -i http://127.0.0.1:18080/stream.mjpg
+curl -i http://127.0.0.1:18080/control
+```
+
+실제 검증 결과:
+
+- configure / build / install 통과
+- `--help` 출력에 다음 옵션이 노출됨
+  - `--server`
+  - `--listen-host`
+  - `--listen-port`
+  - `--bind`
+  - `--port`
+  - `--www-root`
+  - `--stream-width`, `--stream-height`, `--stream-fps`
+- no-display runtime startup 통과
+  - `Initialization of direct headless EGL`
+  - `RemoteStreamServer listening on 127.0.0.1:18080`
+  - resolved `www root` 가 `install/resources/extended_gaussian/server/www` 로 잡힘
+- endpoint smoke
+  - `/healthz`: `200 OK`, JSON body 에 `ok=true`, `service=extended_gaussian_remote_stream`, `version=m4-http-skeleton`, `renderer.initialized=true`, `renderer.has_manifest=false`, `renderer.frame_index` / `renderer.app_time_sec` 포함 확인
+  - `/`: `200 OK`, `text/html`
+  - `/app.js`: `200 OK`, `application/javascript`
+  - `/styles.css`: `200 OK`, `text/css`
+  - `/static/app.js`: `200 OK`, `application/javascript`
+  - `/stream.mjpg`: `501 Not Implemented`
+  - `/control`: `426 Upgrade Required`, `Upgrade: websocket`
+- shutdown smoke
+  - `Ctrl+C` 로 종료 시 `RemoteStreamServer stop elapsed: ... sec` 로그 확인
+  - 프로세스 exit code `0`
+
+M4 completion report:
+
+```text
+- milestone: M4 HTTP skeleton
+- runtime shape: same-process server thread owned by main.cpp
+- no-display startup: pass (direct EGL + offscreen + nogui)
+- static assets: pass (install/resources/extended_gaussian/server/www)
+- /healthz: pass
+- /, /app.js, /styles.css, /static/*: pass
+- /stream.mjpg: placeholder 501
+- /control: placeholder 426 Upgrade Required
+- shutdown via signal: pass
+- deferred scope:
+  - actual MJPEG encoding / multipart streaming
+  - WebSocket upgrade and control session handling
+  - concurrent long-lived connection model hardening
+  - auth / TLS
+```
+
+정리:
+
+- M4는 viewer 와 renderer/server 사이에 최소한의 runtime glue 를 연결해, no-display viewer process 위에 HTTP skeleton 을 올리는 단계로 닫는다.
+- 이 단계에서 브라우저 reference client 와 health endpoint 는 실제로 동작한다.
+- 실제 스트림 frame delivery 와 WebSocket control 은 M5/M6 로 넘긴다.

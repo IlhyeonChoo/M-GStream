@@ -1,6 +1,6 @@
 #pragma once
 
-#include <projects/extended_gaussian/renderer/Config.hpp>
+#include "Config.hpp"
 
 #include <core/system/CommandLineArgs.hpp>
 #include <core/system/Vector.hpp>
@@ -9,7 +9,7 @@
 
 namespace sibr {
 
-	struct SIBR_EXTENDED_GAUSSIAN_EXPORT ServerOptions {
+	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerOptions {
 		bool enabled = false;
 		std::string listen_host = "127.0.0.1";
 		int listen_port = 8080;
@@ -18,7 +18,7 @@ namespace sibr {
 		int stream_fps = 15;
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_EXPORT RemoteCameraPose {
+	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RemoteCameraPose {
 		Vector3f position = Vector3f::Zero();
 		Vector3f forward = Vector3f(0.0f, 0.0f, -1.0f);
 		Vector3f up = Vector3f(0.0f, 1.0f, 0.0f);
@@ -29,12 +29,12 @@ namespace sibr {
 		SetCameraPose
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_EXPORT ControlMessage {
+	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ControlMessage {
 		ControlMessageType type = ControlMessageType::SetCameraPose;
 		RemoteCameraPose camera_pose;
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_EXPORT ParseControlMessageResult {
+	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ParseControlMessageResult {
 		bool ok = false;
 		ControlMessage message;
 		std::string error;
@@ -45,7 +45,7 @@ namespace sibr {
 		}
 	};
 
-	SIBR_EXTENDED_GAUSSIAN_EXPORT ServerOptions ParseServerOptions(const CommandLineArgs& args);
-	SIBR_EXTENDED_GAUSSIAN_EXPORT ParseControlMessageResult ParseControlMessageJson(const std::string& payload);
+	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerOptions ParseServerOptions(const CommandLineArgs& args);
+	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ParseControlMessageResult ParseControlMessageJson(const std::string& payload);
 
 } // namespace sibr

@@ -32,6 +32,8 @@ file(GLOB_RECURSE ALL_FILES
     "*.cpp" "*.h" "*.hpp"  "cuda/*.cu" "cuda/*.cuh"
     "shaders/*.frag" "shaders/*.vert" "shaders/*.geom"
 )
+file(GLOB_RECURSE SERVER_FILES "server/*.cpp" "server/*.h" "server/*.hpp")
+list(REMOVE_ITEM ALL_FILES ${SERVER_FILES})
 
 file(GLOB SHADERS "shaders/*.frag" "shaders/*.vert" "shaders/*.geom")
 
@@ -94,6 +96,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_STANDARD 17
 )
+
+if(SIBR_BUILD_REMOTE_STREAM)
+    add_subdirectory(server)
+endif()
 
 ## High level macro to install
 include(install_runtime)

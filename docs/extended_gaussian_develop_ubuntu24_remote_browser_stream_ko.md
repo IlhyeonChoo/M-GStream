@@ -770,6 +770,7 @@ curl -sf http://127.0.0.1:18080/healthz
   - `/tmp/m6_stream_after_control.bin` capture 생성 확인
 - shutdown
   - signal 후 clean stop 확인
+- 상세 코드 비교: `docs/source_diff_details_733ee7d_to_d30707f/`
 
 M6 completion report:
 
@@ -785,6 +786,8 @@ M6 completion report:
 - clean shutdown with control sessions: pass
 - validated runtime path this turn: installed binary, no-display --headless --server
 ```
+
+상세 코드 비교: `docs/source_diff_details_f1c9f3d_to_d30707f/`
 
 정리:
 

@@ -904,5 +904,6 @@ M6에서 `/control` WebSocket runtime 과 viewer main-thread camera apply 경로
   - renderer camera pose 가 요청한 값으로 변경됨
 - control 적용 후 `/stream.mjpg` 재요청 시 stream 출력 유지 확인
 - signal shutdown 후 clean stop 확인
+- 상세 코드 비교: `docs/source_diff_details_733ee7d_to_d30707f/`
 
 이 시점 기준 M6는 WebSocket control contract / latest-only queue / main-thread camera apply / health metrics 범위에서 닫고, UX 고도화나 추가 control verbs 는 후속 범위로 둔다.

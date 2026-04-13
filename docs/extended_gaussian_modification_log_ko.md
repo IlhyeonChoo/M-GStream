@@ -653,3 +653,90 @@ asset 삭제에는 제약이 있다.
 - Ubuntu Desktop GUI rebuild/run: 사용자 확인 `PASS`
 
 이 시점 기준으로 M2 구현 이슈는 닫고 M3로 넘어갈 수 있다.
+
+## 9. 2026-04-12 M3 server build surface 분리 준비
+
+M3의 목적은 server runtime 을 붙이는 것이 아니라, server 관련 소스의 build surface 와 dependency policy 를 먼저 고정하는 것이다.
+
+이번 단계에서 기록할 구현 내용은 다음과 같다.
+
+- `src/projects/extended_gaussian/CMakeLists.txt`
+  - `SIBR_BUILD_REMOTE_STREAM` option 추가
+  - Linux 기본값 `ON`, Windows 기본값 `OFF`
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+  - `renderer/server` subtree 를 `extended_gaussian` 의 암묵 `GLOB_RECURSE` 소스 집합에서 제외
+  - 조건부로 `renderer/server` 하위 디렉터리를 별도 target 으로 추가
+- `src/projects/extended_gaussian/renderer/server/CMakeLists.txt`
+  - `extended_gaussian_server` static target 추가
+  - HTTP / WebSocket backend 를 `Boost.Beast` 로 고정
+  - `TurboJPEG` 는 probe / summary 만 추가하고 hard requirement 는 M5 로 deferred
+- `src/projects/extended_gaussian/renderer/server/Config.hpp`
+  - server 전용 export macro 분리
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.hpp`
+- `src/projects/extended_gaussian/renderer/server/CameraPoseAdapter.hpp`
+  - server 전용 export macro 로 전환
+
+build tree 운영 메모:
+
+- canonical build path 는 다시 `build-ninja/` 로 사용한다.
+- `build-ninja-m2/` 는 더 이상 기준 경로로 사용하지 않는다.
+
+M3 intended validation command:
+
+```bash
+cmake -S . -B build-ninja -G Ninja -DSIBR_BUILD_REMOTE_STREAM=ON
+cmake --build build-ninja --target extended_gaussian_server --parallel
+cmake --build build-ninja --target extended_gaussian --parallel
+cmake --build build-ninja --target extended_gaussianViewer_app --parallel
+```
+
+주의:
+
+- 이 section 은 구현 내용과 검증 계획만 기록한다.
+- 실제 build / install / runtime 결과는 검증이 끝난 뒤 별도 section 에 append 한다.
+
+## 10. 2026-04-12 M3 server build surface completion
+
+M3에서 `renderer/server` 관련 코드를 runtime feature 추가 없이 명시적인 build target 으로 분리했다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/CMakeLists.txt`
+- `src/projects/extended_gaussian/renderer/CMakeLists.txt`
+- `src/projects/extended_gaussian/renderer/server/CMakeLists.txt`
+- `src/projects/extended_gaussian/renderer/server/Config.hpp`
+- `src/projects/extended_gaussian/renderer/server/ServerProtocol.hpp`
+- `src/projects/extended_gaussian/renderer/server/CameraPoseAdapter.hpp`
+
+적용한 변경:
+
+- top-level project 에 `SIBR_BUILD_REMOTE_STREAM` option 을 추가했다.
+  - Linux 기본값 `ON`
+  - Windows 기본값 `OFF`
+- `extended_gaussian` shared library 의 `GLOB_RECURSE` 결과에서 `renderer/server/*` 를 제거했다.
+- `SIBR_BUILD_REMOTE_STREAM=ON` 일 때만 `renderer/server` 하위 디렉터리를 추가한다.
+- `extended_gaussian_server` 정적 라이브러리를 새로 만들었다.
+- `renderer/server/Config.hpp` 를 추가해 `SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT` macro 를 분리했다.
+- `ServerProtocol.hpp`, `CameraPoseAdapter.hpp` 는 server 전용 export macro 를 사용하도록 바꿨다.
+- `Boost.Beast` 헤더 존재를 configure 시점에서 검증하도록 추가했다.
+- `TurboJPEG` 는 probe / summary 만 수행하고, hard requirement 는 M5 로 deferred 했다.
+- canonical build path 를 `build-ninja/` 로 되돌렸다.
+
+검증 결과:
+
+- `cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc -DSIBR_BUILD_REMOTE_STREAM=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 통과
+- configure summary 에서 다음 확인
+  - `extended_gaussian remote stream modules: ON`
+  - `extended_gaussian_server JSON backend: picojson`
+  - `extended_gaussian_server HTTP/WebSocket backend: Boost.Beast`
+  - `extended_gaussian_server JPEG backend: TurboJPEG not found...`
+- `cmake --build build-ninja --target extended_gaussian_server --parallel` 통과
+- `cmake --build build-ninja --target extended_gaussian --parallel` 통과
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- `./install/bin/extended_gaussianViewer_app --help` 실행 통과
+- `build-ninja/build.ninja`, `compile_commands.json` 에서 `ServerProtocol.cpp`, `CameraPoseAdapter.cpp` 가 `extended_gaussian_server` 에만 속하는 것 확인
+- `ar -t`, `nm -C` 로 server 정적 라이브러리 산출과 핵심 심볼 존재 확인
+- install 결과에는 새 server runtime binary / `www` asset 이 추가되지 않음
+
+이 시점 기준 M3는 build graph / dependency policy / source ownership 정리 범위에서 닫고, runtime 연결은 M4 이후로 넘긴다.

@@ -386,3 +386,88 @@ M2 completion report:
 - M2 기준의 headless render context, empty snapshot, model snapshot, no-display probe, GUI regression evidence가 모두 확보됐다.
 - M5 handoff용 capture 경계는 여전히 `"Gaussian View"` subview의 `captureView(...)` helper다.
 - 이후 단계는 M3 server build surface 와 M4 HTTP skeleton 으로 넘어가면 된다.
+
+## 11. 2026-04-12 M3 server build surface 구현 진행
+
+현재 브랜치의 다음 단계는 runtime 기능 추가가 아니라, server 관련 소스의 build ownership 을 명시적으로 분리하는 것이다.
+
+이번 M3에서 반영하려는 구현 내용은 다음과 같다.
+
+- `renderer/server` 가 `extended_gaussian` shared library 에 `GLOB_RECURSE` 로 암묵 포함되던 상태를 끊고, `extended_gaussian_server` static target 으로 분리한다.
+- `src/projects/extended_gaussian/CMakeLists.txt` 에 `SIBR_BUILD_REMOTE_STREAM` option 을 추가한다.
+  - Linux 기본값: `ON`
+  - Windows 기본값: `OFF`
+- HTTP / WebSocket backend 는 `Boost.Beast` 로 고정한다.
+- `TurboJPEG` 는 M3 시점에는 probe / summary 만 추가하고, hard requirement 는 M5 MJPEG 단계로 미룬다.
+- canonical build tree 는 다시 `build-ninja/` 를 사용한다. `build-ninja-m2/` 는 더 이상 기준 경로로 쓰지 않는다.
+
+이 단계에서 의도하는 검증 명령은 다음과 같다. 실제 결과는 후속 검증이 끝난 뒤 별도 기록한다.
+
+```bash
+cmake -S . -B build-ninja -G Ninja -DSIBR_BUILD_REMOTE_STREAM=ON
+cmake --build build-ninja --target extended_gaussian_server --parallel
+cmake --build build-ninja --target extended_gaussian --parallel
+cmake --build build-ninja --target extended_gaussianViewer_app --parallel
+```
+
+추가 확인 포인트:
+
+- `build-ninja/build.ninja` 또는 `compile_commands.json` 에서
+  - `ServerProtocol.cpp`
+  - `CameraPoseAdapter.cpp`
+  가 `extended_gaussian_server` 에만 속하는지 확인
+- install/runtime binary 증가 없이 build graph 만 정리되었는지 확인
+- 실제 HTTP / MJPEG / WebSocket runtime 연결은 여전히 M4~M6 범위로 유지
+
+## 12. 2026-04-12 M3 server build surface 검증 완료
+
+위 section 11에서 계획한 M3 구현을 실제 `build-ninja/` 기준으로 configure/build/install 까지 검증했다.
+
+실제 검증 결과는 다음과 같다.
+
+- configure
+  - `cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc -DSIBR_BUILD_REMOTE_STREAM=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` 통과
+  - configure 출력에서 다음을 확인했다.
+    - `extended_gaussian remote stream modules: ON`
+    - `extended_gaussian_server JSON backend: picojson`
+    - `extended_gaussian_server HTTP/WebSocket backend: Boost.Beast`
+    - `extended_gaussian_server JPEG backend: TurboJPEG not found...`
+- build
+  - `cmake --build build-ninja --target extended_gaussian_server --parallel` 통과
+  - `cmake --build build-ninja --target extended_gaussian --parallel` 통과
+  - `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- install / smoke
+  - `cmake --build build-ninja --target install --parallel` 통과
+  - `./install/bin/extended_gaussianViewer_app --help` 실행 통과
+- source ownership
+  - `build-ninja/build.ninja` 와 `compile_commands.json` 에서 `ServerProtocol.cpp`, `CameraPoseAdapter.cpp` 가 `extended_gaussian_server` 에만 매핑되는 것을 확인했다.
+- static archive symbols
+  - `ar -t build-ninja/src/projects/extended_gaussian/renderer/server/libextended_gaussian_server_rwdi.a` 결과에 `CameraPoseAdapter.cpp.o`, `ServerProtocol.cpp.o` 포함
+  - `nm -C` 로 `ParseServerOptions`, `ParseControlMessageJson`, `TryBuildInputCamera`, `ExportRemoteCameraPose`, `ValidateRemoteCameraPose` 심볼 존재 확인
+- install artifact scope
+  - `install/bin`, `install/lib` 에는 기존 `extended_gaussianViewer_app`, `libextended_gaussian_rwdi.so` 만 설치되고, 별도 server runtime binary 나 `www` asset 은 추가되지 않았다.
+
+M3 completion report:
+
+```text
+- milestone: M3 server build surface
+- canonical build tree: build-ninja
+- option: SIBR_BUILD_REMOTE_STREAM (Linux ON / Windows OFF)
+- server target: extended_gaussian_server (STATIC)
+- server source ownership: ServerProtocol + CameraPoseAdapter only
+- HTTP/WebSocket backend: Boost.Beast
+- JPEG backend policy: TurboJPEG selected, probe-only in M3
+- build: pass
+- install: pass
+- viewer help smoke: pass
+- deferred scope:
+  - no --server runtime branch yet
+  - no link from extended_gaussianViewer_app to extended_gaussian_server
+  - no HTTP/MJPEG/WebSocket runtime yet
+  - no www install/serving yet
+```
+
+정리:
+
+- M3는 server parser/camera adapter 코드를 renderer 본체에서 분리해 명시적인 target ownership 으로 옮기는 단계다.
+- runtime 동작은 아직 바뀌지 않았고, 이후 M4에서 HTTP skeleton 을 연결하면 된다.

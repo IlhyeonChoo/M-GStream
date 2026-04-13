@@ -853,3 +853,56 @@ M5에서 M4 HTTP skeleton 위에 실제 MJPEG stream delivery 를 연결했다.
 - `Ctrl+C` 종료 시 `RemoteStreamServer stop elapsed: ... sec` 와 exit code `0` 확인
 
 이 시점 기준 M5는 actual MJPEG transport / multi-client fan-out / no-display runtime smoke 범위에서 닫고, WebSocket control wiring 과 browser UX hardening 은 M6 이후로 넘긴다.
+
+
+## 13. 2026-04-13 M6 WebSocket control completion
+
+M6에서 `/control` WebSocket runtime 과 viewer main-thread camera apply 경로를 연결했다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.cpp`
+- `docs/extended_gaussian_develop_ubuntu24_remote_browser_stream_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_manual_checklist_ko.md`
+- `src/projects/extended_gaussian/renderer/server/www/README.md`
+
+적용한 변경:
+
+- `ExtendedGaussianViewer` 에 `"Gaussian View"` camera getter / apply helper 를 추가했다.
+- `main.cpp` 가 `/healthz` snapshot 에 current camera pose 를 포함하도록 연결했다.
+- `main.cpp` 에서 `viewer.onUpdate(...)` 직후 server 의 pending control message 를 소비하고, `TryBuildInputCamera(...)` 결과를 main thread 에서 apply 하도록 연결했다.
+- `RemoteStreamServer` 가 `/control` WebSocket upgrade 를 실제 구현하도록 바꿨다.
+- WebSocket session 은 connect 시 `ready`, valid payload 시 `ack`, invalid/binary payload 시 `error` text JSON 을 반환하도록 정리했다.
+- control path 는 single latest-only mailbox 로 제한하고 supersede / apply stats 를 `/healthz` 에 노출했다.
+- `/healthz` 에 current renderer camera pose 와 control session / queue / apply metrics 를 추가했다.
+- stop path 에서 control WebSocket sessions 를 clean close 하고 join 하도록 lifetime 을 정리했다.
+- `www/README` 와 수동 checklist 를 M6 contract 에 맞게 갱신했다.
+
+검증 결과:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- installed binary `--headless --server --path ../gaussian-splatting/eval/bonsai` startup 통과
+- `/healthz`: `200 OK`, `version=m6-websocket-control`, current camera pose 노출 확인
+- plain `GET /control`: `426 Upgrade Required`, `WebSocket upgrade required for /control.` JSON 확인
+- Node WebSocket smoke
+  - `ready` text frame 수신
+  - invalid payload -> `error` text frame 수신
+  - valid `set_camera_pose` -> `ack` text frame 수신
+- 후속 `/healthz` 에서 다음 확인
+  - `control.messages_received=2`
+  - `control.messages_queued=1`
+  - `control.messages_rejected=1`
+  - `control.messages_applied=1`
+  - `control.apply_failures=0`
+  - `control.last_applied_sequence=1`
+  - `control.message_pending=false`
+  - renderer camera pose 가 요청한 값으로 변경됨
+- control 적용 후 `/stream.mjpg` 재요청 시 stream 출력 유지 확인
+- signal shutdown 후 clean stop 확인
+
+이 시점 기준 M6는 WebSocket control contract / latest-only queue / main-thread camera apply / health metrics 범위에서 닫고, UX 고도화나 추가 control verbs 는 후속 범위로 둔다.

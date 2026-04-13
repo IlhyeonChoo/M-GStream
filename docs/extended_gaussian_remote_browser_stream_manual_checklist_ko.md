@@ -1,7 +1,8 @@
 # Remote Browser Stream Manual Checklist
 
 작성일: 2026-04-08  
-적용 시점: M5에서 `/stream.mjpg`가 실제로 연결된 이후. `/control` WebSocket 적용 항목은 M6 이후에 사용한다.
+최신 갱신: 2026-04-13 M6 기준
+적용 시점: M5에서 `/stream.mjpg`가 실제로 연결된 이후. 현재 문서는 M6 `/control` WebSocket contract 까지 반영한다.
 
 ## 1. 목적
 
@@ -67,14 +68,25 @@
 ### 5.1 연결 / 해제
 
 - `/control`에 최초 WebSocket 연결이 성공하는지 확인한다.
+- reference client의 `Use Current Origin` 이 same-origin 기준 `ws://.../control` 또는 `wss://.../control` 을 채우는지 확인한다.
+- `Connect WebSocket` / `Disconnect` 버튼과 상태줄이 실제 연결 상태와 일치하는지 확인한다.
 - 클라이언트 disconnect 시 서버가 정상적으로 세션 정리를 하는지 확인한다.
 - 재연결이 반복되어도 서버가 hang 또는 crash하지 않는지 확인한다.
+- 같은 페이지에서 `Open Stream` 과 WebSocket control 을 함께 사용해도 충돌이 없는지 확인한다.
 
 ### 5.2 정상 payload
 
 - `valid_set_camera_pose_default.json` 전송 시 카메라가 즉시 이동하는지 확인한다.
-- 여러 정상 payload를 연속 전송해도 순서대로 반영되는지 확인한다.
+- 여러 정상 payload를 연속 전송하면 latest-only 정책에 따라 마지막 pending payload 만 남는지 확인한다.
+- ack 응답의 `queue_mode=latest_only`, `sequence`, `superseded_previous` 값이 기대와 맞는지 확인한다.
 - 전송 직후 MJPEG preview가 새 시점으로 갱신되는지 확인한다.
+
+### 5.3 ready / health correlation
+
+- WebSocket connect 직후 `ready` text JSON 이 오는지 확인한다.
+- `ready` 에 `queue_mode=latest_only` 가 포함되는지 확인한다.
+- `ready` 또는 후속 `/healthz` 에 current camera pose 가 노출되는지 확인한다.
+- 정상 payload apply 후 `/healthz` 의 `messages_applied`, `last_applied_sequence`, `message_pending` 값이 기대와 맞는지 확인한다.
 
 ## 6. 실패 payload 처리
 
@@ -90,8 +102,10 @@
 각 케이스에서 확인할 항목:
 
 - 서버가 parse / validation 실패를 감지하는지
-- 실패 이유가 내부 로그 또는 디버그 응답에 남는지
+- 실패 이유가 WebSocket `error` text frame 또는 내부 로그에 남는지
 - 이전 camera pose가 그대로 유지되는지
+- `/healthz` 의 `messages_rejected` 가 증가하는지
+- `/healthz` 의 `messages_applied` 와 current camera pose 가 유지되는지
 - 이후 정상 payload를 보내면 다시 회복되는지
 
 ## 7. 장시간 / 안정성 점검
@@ -127,5 +141,8 @@
 ### M6 additional pass
 
 - `/control` WebSocket 연결/해제가 안정적으로 동작한다.
-- 정상 payload는 camera update로 이어진다.
-- 실패 payload는 camera state를 바꾸지 않고 거부된다.
+- plain HTTP `GET /control` 은 WebSocket upgrade 안내로 끝나고, static route 로 오매핑되지 않는다.
+- connect 직후 `ready` text frame 이 도착한다.
+- 정상 payload는 `ack` text frame 과 함께 camera update로 이어진다.
+- 실패 payload는 `error` text frame 을 반환하고 camera state를 바꾸지 않는다.
+- `/healthz` 의 control metrics 와 camera pose 가 실제 적용 결과와 일치한다.

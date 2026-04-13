@@ -692,3 +692,102 @@ M5 completion report:
 - M5는 M4 skeleton 위에 실제 MJPEG frame transport 를 얹는 단계로 닫는다.
 - 이 시점부터 no-display Ubuntu process 하나만으로 실제 Gaussian scene 을 브라우저로 스트리밍할 수 있다.
 - remote control 적용은 M6에서 별도 lifecycle 로 연결한다.
+
+
+## 15. 2026-04-13 M6 WebSocket control 구현 및 smoke 검증 완료
+
+M6에서는 M5의 MJPEG stream 위에 실제 WebSocket camera control 경로를 연결했다.
+이 단계에서 `/control` 은 더 이상 placeholder HTTP 426 endpoint 가 아니라, text JSON control payload 를 받아 viewer main/update loop 에 카메라 변경을 적용하는 실제 runtime endpoint 가 된다.
+
+핵심 구현 범위:
+
+- `renderer/ExtendedGaussianViewer.*`
+  - `"Gaussian View"` subview 의 현재 카메라를 읽는 getter 와 새 카메라를 적용하는 setter 를 추가했다.
+  - interactive camera handler 가 있으면 handler 를 통해 state 를 갱신하고, 그렇지 않으면 subview camera 를 직접 갱신한다.
+- `apps/extended_gaussianViewer/main.cpp`
+  - `/healthz` 에 현재 `"Gaussian View"` camera pose 를 함께 내보내도록 연결했다.
+  - `viewer.onUpdate(...)` 직후, `viewer.onRender(...)` 직전에 server 의 latest control mailbox 를 소비하도록 연결했다.
+  - `ParseControlMessageJson(...)` / `TryBuildInputCamera(...)` 로 payload 를 검증하고, apply 는 main thread 에서만 수행한다.
+- `renderer/server/RemoteStreamServer.*`
+  - `/control` WebSocket upgrade 를 실제 구현했다.
+  - connection 직후 `ready` text JSON 을 전송하고, binary payload 는 거부한다.
+  - valid `set_camera_pose` payload 는 latest-only mailbox 에 queue 하고 `ack` text JSON 을 반환한다.
+  - invalid payload 는 `error` text JSON 으로 응답한다.
+  - `/healthz` 에 control metrics (`active_control_clients`, `messages_received`, `messages_queued`, `messages_rejected`, `messages_superseded`, `messages_applied`, `apply_failures`, `latest_received_sequence`, `last_applied_sequence`, `message_pending`) 와 current renderer camera pose 를 노출한다.
+  - shutdown 시 accept loop, MJPEG sessions 와 함께 control WebSocket sessions 도 clean stop 되도록 lifetime 을 정리했다.
+
+검증 명령:
+
+```bash
+cmake --build build-ninja --target extended_gaussianViewer_app --parallel
+cmake --build build-ninja --target install --parallel
+./install/bin/extended_gaussianViewer_app   --headless --server   --listen-host 127.0.0.1   --listen-port 18080   --render-width 640 --render-height 360   --stream-width 320 --stream-height 180   --stream-fps 2   --path ../gaussian-splatting/eval/bonsai
+curl -sf http://127.0.0.1:18080/healthz
+curl -s -D /tmp/m6_control_get_headers.txt -o /tmp/m6_control_get_body.txt http://127.0.0.1:18080/control
+node /tmp/m6_ws_smoke.js
+curl --max-time 2 -s http://127.0.0.1:18080/stream.mjpg -o /tmp/m6_stream_after_control.bin
+curl -sf http://127.0.0.1:18080/healthz
+```
+
+실제 검증 결과:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- installed binary no-display startup 통과
+  - `Initialization of direct headless EGL`
+  - `GaussianView CUDA/GL interop enabled.`
+  - `Loading 1076487 Gaussians (SH Degree: 3)`
+  - `RemoteStreamServer listening on 127.0.0.1:18080 ... JPEG backend: TurboJPEG`
+- `/healthz`
+  - `200 OK`
+  - `version=m6-websocket-control`
+  - `renderer.camera_pose_available=true`
+  - current camera pose JSON 노출 확인
+- plain `GET /control`
+  - `426 Upgrade Required`
+  - JSON body: `{"ok":false,"type":"error","error":"WebSocket upgrade required for /control."}`
+- WebSocket `/control` smoke
+  - connect 직후 `ready` text JSON 수신
+  - invalid payload 전송 시 `error` text JSON 수신
+    - `"Missing required numeric field 'fovy'."`
+  - valid payload 전송 시 `ack` text JSON 수신
+    - `request_type=set_camera_pose`
+    - `status=queued`
+    - `queue_mode=latest_only`
+    - `sequence=1`
+- apply result 확인
+  - 후속 `/healthz` 에서 `control.messages_received=2`
+  - `control.messages_queued=1`
+  - `control.messages_rejected=1`
+  - `control.messages_applied=1`
+  - `control.apply_failures=0`
+  - `control.last_applied_sequence=1`
+  - `control.message_pending=false`
+  - `renderer.camera_pose.position=[0.5,-1.0,8.0]`
+  - `renderer.camera_pose.fovy=1.0`
+- control 적용 후 `/stream.mjpg` 재확인
+  - multipart stream 출력 계속 유지
+  - `/tmp/m6_stream_after_control.bin` capture 생성 확인
+- shutdown
+  - signal 후 clean stop 확인
+
+M6 completion report:
+
+```text
+- milestone: M6 websocket camera control
+- /control websocket upgrade: pass
+- ready/ack/error text frames: pass
+- latest-only queue semantics: pass
+- main-thread camera apply: pass
+- invalid payload rejection without apply: pass
+- /healthz control metrics + camera pose: pass
+- control after stream start: pass
+- clean shutdown with control sessions: pass
+- validated runtime path this turn: installed binary, no-display --headless --server
+```
+
+정리:
+
+- M6는 browser-side control contract 와 viewer camera apply path 를 실제 runtime 으로 연결하는 단계로 닫는다.
+- 이 시점부터 headless Ubuntu process 하나로 MJPEG preview 와 WebSocket camera control 이 모두 동작한다.
+- 남은 후속 범위는 UX 보강, reconnect/backoff, auth, richer control verbs 같은 확장 사항이다.

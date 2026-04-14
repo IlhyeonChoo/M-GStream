@@ -8,7 +8,10 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,6 +22,7 @@ constexpr size_t kPboRingSize = 3;
 constexpr size_t kRawQueueCapacity = 3;
 constexpr int kDefaultJpegQuality = 80;
 constexpr std::chrono::milliseconds kDefaultWaitTimeout(250);
+constexpr size_t kLatencyHistoryLimit = 4096;
 
 bool isFenceReady(GLsync fence)
 {
@@ -29,15 +33,29 @@ bool isFenceReady(GLsync fence)
     return result == GL_ALREADY_SIGNALED || result == GL_CONDITION_SATISFIED;
 }
 
+uint64_t toUnixTimeMilliseconds(const std::chrono::system_clock::time_point& time_point)
+{
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(time_point.time_since_epoch()).count());
+}
+
+double toMilliseconds(const std::chrono::steady_clock::duration& duration)
+{
+    return std::chrono::duration<double, std::milli>(duration).count();
+}
+
 } // namespace
 
 namespace sibr {
 
 struct MjpegStreamer::RawFrame {
     uint64_t source_frame_index = 0;
+    uint64_t control_sequence = 0;
     int width = 0;
     int height = 0;
     bool bottom_up = true;
+    std::chrono::steady_clock::time_point capture_submit_time = std::chrono::steady_clock::time_point::min();
+    std::chrono::steady_clock::time_point raw_ready_time = std::chrono::steady_clock::time_point::min();
+    std::chrono::system_clock::time_point capture_submit_wall_time = std::chrono::system_clock::time_point::min();
     std::vector<uint8_t> rgb_bytes;
 };
 
@@ -48,7 +66,10 @@ struct MjpegStreamer::PboSlot {
     int width = 0;
     int height = 0;
     uint64_t source_frame_index = 0;
+    uint64_t control_sequence = 0;
     size_t byte_size = 0;
+    std::chrono::steady_clock::time_point capture_submit_time = std::chrono::steady_clock::time_point::min();
+    std::chrono::system_clock::time_point capture_submit_wall_time = std::chrono::system_clock::time_point::min();
 };
 
 MjpegStreamer::MjpegStreamer(ServerOptions options)
@@ -67,6 +88,19 @@ void MjpegStreamer::start()
         return;
     }
     stop_requested_.store(false);
+    raw_frames_captured_.store(0);
+    raw_frames_dropped_.store(0);
+    raw_queue_dropped_.store(0);
+    jpeg_frames_published_.store(0);
+    latest_sequence_.store(0);
+    {
+        std::lock_guard<std::mutex> lock(metrics_mutex_);
+        capture_to_raw_ready_samples_ms_.clear();
+        encode_samples_ms_.clear();
+        capture_to_encoded_samples_ms_.clear();
+        encoded_bytes_total_ = 0;
+        encoded_bytes_last_ = 0;
+    }
     encoder_thread_ = std::thread(&MjpegStreamer::encoderThreadMain, this);
 }
 
@@ -150,11 +184,45 @@ void MjpegStreamer::destroyCaptureResources()
         }
         slot.pending = false;
         slot.byte_size = 0;
+        slot.control_sequence = 0;
+        slot.capture_submit_time = std::chrono::steady_clock::time_point::min();
+        slot.capture_submit_wall_time = std::chrono::system_clock::time_point::min();
     }
     pbo_slots_.clear();
     capture_width_ = 0;
     capture_height_ = 0;
     next_submit_index_ = 0;
+}
+
+void MjpegStreamer::pushLatencySample(std::vector<double>& samples, double value_ms)
+{
+    if (value_ms < 0.0) {
+        return;
+    }
+    if (samples.size() >= kLatencyHistoryLimit) {
+        samples.erase(samples.begin(), samples.begin() + static_cast<std::ptrdiff_t>(samples.size() - kLatencyHistoryLimit + 1));
+    }
+    samples.push_back(value_ms);
+}
+
+MjpegStreamer::TimingSummary MjpegStreamer::summarizeLatencySamples(const std::vector<double>& samples) const
+{
+    TimingSummary summary;
+    summary.samples = samples.size();
+    if (samples.empty()) {
+        return summary;
+    }
+
+    summary.average_ms = std::accumulate(samples.begin(), samples.end(), 0.0) / static_cast<double>(samples.size());
+    summary.max_ms = *std::max_element(samples.begin(), samples.end());
+
+    std::vector<double> sorted = samples;
+    std::sort(sorted.begin(), sorted.end());
+    const size_t p50_index = sorted.size() / 2;
+    const size_t p95_index = std::min(sorted.size() - 1, static_cast<size_t>(std::ceil(static_cast<double>(sorted.size()) * 0.95)) - 1);
+    summary.p50_ms = sorted[p50_index];
+    summary.p95_ms = sorted[p95_index];
+    return summary;
 }
 
 void MjpegStreamer::drainReadyReadbacks()
@@ -180,9 +248,13 @@ void MjpegStreamer::drainReadyReadbacks()
 
         auto frame = std::make_shared<RawFrame>();
         frame->source_frame_index = slot.source_frame_index;
+        frame->control_sequence = slot.control_sequence;
         frame->width = slot.width;
         frame->height = slot.height;
         frame->bottom_up = true;
+        frame->capture_submit_time = slot.capture_submit_time;
+        frame->raw_ready_time = std::chrono::steady_clock::now();
+        frame->capture_submit_wall_time = slot.capture_submit_wall_time;
         frame->rgb_bytes.resize(slot.byte_size);
         std::memcpy(frame->rgb_bytes.data(), mapped, slot.byte_size);
         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
@@ -193,6 +265,11 @@ void MjpegStreamer::drainReadyReadbacks()
         slot.pending = false;
 
         ++raw_frames_captured_;
+        if (frame->capture_submit_time != std::chrono::steady_clock::time_point::min()) {
+            const double capture_to_raw_ms = toMilliseconds(frame->raw_ready_time - frame->capture_submit_time);
+            std::lock_guard<std::mutex> lock(metrics_mutex_);
+            pushLatencySample(capture_to_raw_ready_samples_ms_, capture_to_raw_ms);
+        }
         enqueueRawFrame(std::move(frame));
     }
 }
@@ -215,7 +292,7 @@ void MjpegStreamer::enqueueRawFrame(std::shared_ptr<RawFrame> frame)
     raw_cv_.notify_one();
 }
 
-void MjpegStreamer::captureFrame(const IRenderTarget& render_target, uint64_t source_frame_index)
+void MjpegStreamer::captureFrame(const IRenderTarget& render_target, uint64_t source_frame_index, uint64_t control_sequence)
 {
     if (!running_.load()) {
         return;
@@ -275,7 +352,10 @@ void MjpegStreamer::captureFrame(const IRenderTarget& render_target, uint64_t so
     selected_slot->width = static_cast<int>(render_target.w());
     selected_slot->height = static_cast<int>(render_target.h());
     selected_slot->source_frame_index = source_frame_index;
+    selected_slot->control_sequence = control_sequence;
     selected_slot->byte_size = static_cast<size_t>(render_target.w()) * static_cast<size_t>(render_target.h()) * 3;
+    selected_slot->capture_submit_time = now;
+    selected_slot->capture_submit_wall_time = std::chrono::system_clock::now();
     last_capture_submit_ = now;
 }
 
@@ -314,6 +394,15 @@ MjpegStreamer::Stats MjpegStreamer::stats() const
     output.output_width = options_.stream_width;
     output.output_height = options_.stream_height;
     output.target_fps = options_.stream_fps;
+    {
+        std::lock_guard<std::mutex> lock(metrics_mutex_);
+        output.encoded_bytes_total = encoded_bytes_total_;
+        output.encoded_bytes_last = encoded_bytes_last_;
+        output.encoded_bytes_average = output.jpeg_frames_published == 0 ? 0.0 : static_cast<double>(encoded_bytes_total_) / static_cast<double>(output.jpeg_frames_published);
+        output.capture_to_raw_ready_ms = summarizeLatencySamples(capture_to_raw_ready_samples_ms_);
+        output.encode_ms = summarizeLatencySamples(encode_samples_ms_);
+        output.capture_to_encoded_ms = summarizeLatencySamples(capture_to_encoded_samples_ms_);
+    }
     return output;
 }
 
@@ -372,19 +461,39 @@ void MjpegStreamer::encoderThreadMain()
             output_height = resized.rows;
         }
 
+        const auto encode_start = std::chrono::steady_clock::now();
         std::vector<unsigned char> jpeg_bytes;
         std::string encode_error;
         if (!encoder.encodeRgb(encode_rgb, output_width, output_height, jpeg_bytes, encode_error)) {
             SIBR_WRG << "MjpegStreamer JPEG encode failed: " << encode_error << std::endl;
             continue;
         }
+        const auto encode_finish = std::chrono::steady_clock::now();
 
         auto frame = std::make_shared<EncodedFrame>();
         frame->sequence = latest_sequence_.fetch_add(1) + 1;
         frame->source_frame_index = raw_frame->source_frame_index;
+        frame->control_sequence = raw_frame->control_sequence;
         frame->width = output_width;
         frame->height = output_height;
+        frame->encode_ms = toMilliseconds(encode_finish - encode_start);
+        if (raw_frame->capture_submit_time != std::chrono::steady_clock::time_point::min()) {
+            frame->capture_to_encoded_ms = toMilliseconds(encode_finish - raw_frame->capture_submit_time);
+        }
+        if (raw_frame->capture_submit_time != std::chrono::steady_clock::time_point::min() &&
+            raw_frame->raw_ready_time != std::chrono::steady_clock::time_point::min()) {
+            frame->capture_to_raw_ready_ms = toMilliseconds(raw_frame->raw_ready_time - raw_frame->capture_submit_time);
+        }
+        frame->encoded_unix_time_ms = toUnixTimeMilliseconds(std::chrono::system_clock::now());
         frame->jpeg_bytes = std::make_shared<std::vector<unsigned char>>(std::move(jpeg_bytes));
+
+        {
+            std::lock_guard<std::mutex> lock(metrics_mutex_);
+            pushLatencySample(encode_samples_ms_, frame->encode_ms);
+            pushLatencySample(capture_to_encoded_samples_ms_, frame->capture_to_encoded_ms);
+            encoded_bytes_last_ = frame->jpeg_bytes ? frame->jpeg_bytes->size() : 0;
+            encoded_bytes_total_ += encoded_bytes_last_;
+        }
 
         {
             std::lock_guard<std::mutex> lock(latest_mutex_);

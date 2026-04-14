@@ -79,7 +79,7 @@ void updateServerHealth(RemoteStreamServer* server, const ExtendedGaussianViewer
     server->setRendererHealthSnapshot(makeRendererHealthSnapshot(viewer));
 }
 
-void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewer)
+void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewer, uint64_t* visible_control_sequence)
 {
     if (!server) {
         return;
@@ -87,7 +87,8 @@ void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewe
 
     ControlMessage message;
     uint64_t sequence = 0;
-    if (!server->consumePendingControlMessage(message, sequence)) {
+    std::chrono::steady_clock::time_point received_at = std::chrono::steady_clock::time_point::min();
+    if (!server->consumePendingControlMessage(message, sequence, received_at)) {
         return;
     }
 
@@ -104,10 +105,18 @@ void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewe
     }
     }
 
+    const auto apply_end = std::chrono::steady_clock::now();
+    double receive_to_apply_ms = 0.0;
+    if (received_at != std::chrono::steady_clock::time_point::min()) {
+        receive_to_apply_ms = std::chrono::duration<double, std::milli>(apply_end - received_at).count();
+    }
+
     if (!applied) {
         SIBR_WRG << "Failed to apply remote control message seq=" << sequence << ": " << apply_error << std::endl;
+    } else if (visible_control_sequence != nullptr) {
+        *visible_control_sequence = sequence;
     }
-    server->recordControlMessageApplied(sequence, applied);
+    server->recordControlMessageApplied(sequence, applied, receive_to_apply_ms);
 }
 #endif
 
@@ -119,6 +128,7 @@ int runInteractive(
 #endif
 )
 {
+    uint64_t visible_control_sequence = 0;
     while (window.isOpened() && !shutdownRequested())
     {
         if (window.GLFW() != nullptr) {
@@ -133,13 +143,13 @@ int runInteractive(
 
         viewer.onUpdate(Input::global());
 #if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
-        pumpRemoteControl(server, viewer);
+        pumpRemoteControl(server, viewer, &visible_control_sequence);
 #endif
         viewer.onRender(window);
 #if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
         if (server) {
             if (const RenderTargetRGB* stream_target = viewer.getGaussianViewRenderTarget()) {
-                server->submitRenderedFrame(*stream_target, viewer.getFrameIndex());
+                server->submitRenderedFrame(*stream_target, viewer.getFrameIndex(), visible_control_sequence);
             }
             updateServerHealth(server, viewer);
         }

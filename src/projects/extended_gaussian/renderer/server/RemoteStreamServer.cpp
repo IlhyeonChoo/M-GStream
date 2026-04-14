@@ -11,12 +11,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -33,7 +35,7 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr const char* kServiceName = "extended_gaussian_remote_stream";
-constexpr const char* kVersionName = "m6-websocket-control";
+constexpr const char* kVersionName = "m7-integration-verification";
 constexpr const char* kMjpegBoundary = "ExGaussBoundary";
 constexpr auto kAcceptSleep = std::chrono::milliseconds(25);
 constexpr auto kStreamWait = std::chrono::milliseconds(250);
@@ -57,6 +59,28 @@ struct ControlClientSession {
     tcp::socket* socket = nullptr;
     std::thread thread;
 };
+
+uint64_t unixTimeMillisecondsNow()
+{
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+std::string timingSummaryJson(const sibr::TimingStatsSummary& summary)
+{
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(3);
+    stream
+        << "{"
+        << "\"samples\":" << summary.samples << ","
+        << "\"average_ms\":" << summary.average_ms << ","
+        << "\"p50_ms\":" << summary.p50_ms << ","
+        << "\"p95_ms\":" << summary.p95_ms << ","
+        << "\"max_ms\":" << summary.max_ms
+        << "}";
+    return stream.str();
+}
 
 std::string jsonEscape(const std::string& value)
 {
@@ -289,9 +313,17 @@ std::string healthJson(
         << "    \"queue_dropped\": " << stats.stream_queue_dropped << ",\n"
         << "    \"frames_published\": " << stats.stream_frames_published << ",\n"
         << "    \"latest_sequence\": " << stats.stream_latest_sequence << ",\n"
+        << "    \"encoded_bytes_total\": " << stats.stream_encoded_bytes_total << ",\n"
+        << "    \"encoded_bytes_last\": " << stats.stream_encoded_bytes_last << ",\n"
+        << "    \"encoded_bytes_average\": " << stats.stream_encoded_bytes_average << ",\n"
         << "    \"width\": " << stats.stream_width << ",\n"
         << "    \"height\": " << stats.stream_height << ",\n"
-        << "    \"fps\": " << stats.stream_fps << "\n"
+        << "    \"fps\": " << stats.stream_fps << ",\n"
+        << "    \"timing_ms\": {\n"
+        << "      \"capture_to_raw_ready\": " << timingSummaryJson(stats.stream_capture_to_raw_ready_ms) << ",\n"
+        << "      \"encode\": " << timingSummaryJson(stats.stream_encode_ms) << ",\n"
+        << "      \"capture_to_encoded\": " << timingSummaryJson(stats.stream_capture_to_encoded_ms) << "\n"
+        << "    }\n"
         << "  },\n"
         << "  \"control\": {\n"
         << "    \"websocket_path\": \"/control\",\n"
@@ -305,7 +337,10 @@ std::string healthJson(
         << "    \"apply_failures\": " << stats.control_apply_failures << ",\n"
         << "    \"latest_received_sequence\": " << stats.control_latest_received_sequence << ",\n"
         << "    \"last_applied_sequence\": " << stats.control_last_applied_sequence << ",\n"
-        << "    \"message_pending\": " << (stats.control_message_pending ? "true" : "false") << "\n"
+        << "    \"message_pending\": " << (stats.control_message_pending ? "true" : "false") << ",\n"
+        << "    \"timing_ms\": {\n"
+        << "      \"receive_to_apply\": " << timingSummaryJson(stats.control_receive_to_apply_ms) << "\n"
+        << "    }\n"
         << "  },\n"
         << "  \"renderer\": {\n"
         << "    \"initialized\": " << (renderer.initialized ? "true" : "false") << ",\n"
@@ -349,6 +384,7 @@ std::string controlReadyJson(const sibr::RendererHealthSnapshot& renderer)
 std::string controlAckJson(uint64_t sequence, bool superseded_previous)
 {
     std::ostringstream stream;
+    const uint64_t server_ack_unix_ms = unixTimeMillisecondsNow();
     stream
         << "{"
         << "\"ok\":true,"
@@ -357,7 +393,8 @@ std::string controlAckJson(uint64_t sequence, bool superseded_previous)
         << "\"status\":\"queued\","
         << "\"queue_mode\":\"latest_only\","
         << "\"sequence\":" << sequence << ","
-        << "\"superseded_previous\":" << (superseded_previous ? "true" : "false")
+        << "\"superseded_previous\":" << (superseded_previous ? "true" : "false") << ","
+        << "\"server_ack_unix_ms\":" << server_ack_unix_ms
         << "}";
     return stream.str();
 }
@@ -392,14 +429,21 @@ std::string mjpegPartHeader(const sibr::MjpegStreamer::EncodedFrame& frame)
 {
     const size_t content_length = frame.jpeg_bytes ? frame.jpeg_bytes->size() : 0;
     std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(3);
     stream
         << "--" << kMjpegBoundary << "\r\n"
         << "Content-Type: image/jpeg\r\n"
         << "Content-Length: " << content_length << "\r\n"
         << "X-Sequence: " << frame.sequence << "\r\n"
         << "X-Source-Frame-Index: " << frame.source_frame_index << "\r\n"
+        << "X-Control-Sequence: " << frame.control_sequence << "\r\n"
         << "X-Width: " << frame.width << "\r\n"
-        << "X-Height: " << frame.height << "\r\n\r\n";
+        << "X-Height: " << frame.height << "\r\n"
+        << "X-Capture-To-Raw-Ready-Ms: " << frame.capture_to_raw_ready_ms << "\r\n"
+        << "X-Encode-Ms: " << frame.encode_ms << "\r\n"
+        << "X-Capture-To-Encoded-Ms: " << frame.capture_to_encoded_ms << "\r\n"
+        << "X-Encoded-Unix-Ms: " << frame.encoded_unix_time_ms << "\r\n\r\n";
     return stream.str();
 }
 
@@ -523,6 +567,12 @@ bool RemoteStreamServer::start(std::string& error)
         stats_.stream_width = options_.stream_width;
         stats_.stream_height = options_.stream_height;
         stats_.stream_fps = options_.stream_fps;
+        stats_.stream_encoded_bytes_total = 0;
+        stats_.stream_encoded_bytes_last = 0;
+        stats_.stream_encoded_bytes_average = 0.0;
+        stats_.stream_capture_to_raw_ready_ms = {};
+        stats_.stream_encode_ms = {};
+        stats_.stream_capture_to_encoded_ms = {};
         stats_.active_control_clients = 0;
         stats_.control_messages_received = 0;
         stats_.control_messages_queued = 0;
@@ -533,6 +583,7 @@ bool RemoteStreamServer::start(std::string& error)
         stats_.control_latest_received_sequence = 0;
         stats_.control_last_applied_sequence = 0;
         stats_.control_message_pending = false;
+        stats_.control_receive_to_apply_ms = {};
     }
 
     try {
@@ -658,6 +709,10 @@ void RemoteStreamServer::stop()
         std::lock_guard<std::mutex> lock(control_message_mutex_);
         pending_control_message_.reset();
     }
+    {
+        std::lock_guard<std::mutex> lock(control_latency_mutex_);
+        control_receive_to_apply_samples_ms_.clear();
+    }
 
     if (mjpeg_streamer_) {
         mjpeg_streamer_.reset();
@@ -684,12 +739,12 @@ void RemoteStreamServer::setRendererHealthSnapshot(const RendererHealthSnapshot&
     renderer_health_ = snapshot;
 }
 
-void RemoteStreamServer::submitRenderedFrame(const IRenderTarget& render_target, uint64_t source_frame_index)
+void RemoteStreamServer::submitRenderedFrame(const IRenderTarget& render_target, uint64_t source_frame_index, uint64_t control_sequence)
 {
     if (!running() || !mjpeg_streamer_) {
         return;
     }
-    mjpeg_streamer_->captureFrame(render_target, source_frame_index);
+    mjpeg_streamer_->captureFrame(render_target, source_frame_index, control_sequence);
 }
 
 void RemoteStreamServer::releaseRenderThreadResources()
@@ -700,13 +755,17 @@ void RemoteStreamServer::releaseRenderThreadResources()
     mjpeg_streamer_->releaseRenderThreadResources();
 }
 
-bool RemoteStreamServer::consumePendingControlMessage(ControlMessage& message, uint64_t& sequence)
+bool RemoteStreamServer::consumePendingControlMessage(
+    ControlMessage& message,
+    uint64_t& sequence,
+    std::chrono::steady_clock::time_point& received_at)
 {
     bool has_message = false;
     {
         std::lock_guard<std::mutex> lock(control_message_mutex_);
         if (pending_control_message_) {
             sequence = pending_control_message_->sequence;
+            received_at = pending_control_message_->received_time;
             message = pending_control_message_->message;
             pending_control_message_.reset();
             has_message = true;
@@ -719,8 +778,49 @@ bool RemoteStreamServer::consumePendingControlMessage(ControlMessage& message, u
     return has_message;
 }
 
-void RemoteStreamServer::recordControlMessageApplied(uint64_t sequence, bool applied)
+void RemoteStreamServer::pushControlLatencySample(double value_ms)
 {
+    if (value_ms < 0.0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(control_latency_mutex_);
+    constexpr size_t kLatencyHistoryLimit = 4096;
+    if (control_receive_to_apply_samples_ms_.size() >= kLatencyHistoryLimit) {
+        control_receive_to_apply_samples_ms_.erase(
+            control_receive_to_apply_samples_ms_.begin(),
+            control_receive_to_apply_samples_ms_.begin() + static_cast<std::ptrdiff_t>(control_receive_to_apply_samples_ms_.size() - kLatencyHistoryLimit + 1));
+    }
+    control_receive_to_apply_samples_ms_.push_back(value_ms);
+}
+
+TimingStatsSummary RemoteStreamServer::summarizeControlLatencySamples() const
+{
+    TimingStatsSummary summary;
+    std::lock_guard<std::mutex> lock(control_latency_mutex_);
+    summary.samples = control_receive_to_apply_samples_ms_.size();
+    if (control_receive_to_apply_samples_ms_.empty()) {
+        return summary;
+    }
+
+    summary.average_ms = std::accumulate(control_receive_to_apply_samples_ms_.begin(), control_receive_to_apply_samples_ms_.end(), 0.0) / static_cast<double>(control_receive_to_apply_samples_ms_.size());
+    summary.max_ms = *std::max_element(control_receive_to_apply_samples_ms_.begin(), control_receive_to_apply_samples_ms_.end());
+    std::vector<double> sorted = control_receive_to_apply_samples_ms_;
+    std::sort(sorted.begin(), sorted.end());
+    const size_t p50_index = sorted.size() / 2;
+    const size_t p95_index = std::min(sorted.size() - 1, static_cast<size_t>(std::ceil(static_cast<double>(sorted.size()) * 0.95)) - 1);
+    summary.p50_ms = sorted[p50_index];
+    summary.p95_ms = sorted[p95_index];
+    return summary;
+}
+
+void RemoteStreamServer::recordControlMessageApplied(uint64_t sequence, bool applied, double receive_to_apply_ms)
+{
+    if (applied) {
+        pushControlLatencySample(receive_to_apply_ms);
+    }
+
+    TimingStatsSummary latency_summary = summarizeControlLatencySamples();
+
     std::lock_guard<std::mutex> lock(stats_mutex_);
     if (applied) {
         ++stats_.control_messages_applied;
@@ -728,6 +828,7 @@ void RemoteStreamServer::recordControlMessageApplied(uint64_t sequence, bool app
     } else {
         ++stats_.control_apply_failures;
     }
+    stats_.control_receive_to_apply_ms = latency_summary;
 }
 
 bool RemoteStreamServer::enqueueLatestControlMessage(
@@ -746,6 +847,7 @@ bool RemoteStreamServer::enqueueLatestControlMessage(
         superseded_previous = pending_control_message_.has_value();
         PendingControlMessage pending;
         pending.sequence = next_control_sequence_++;
+        pending.received_time = std::chrono::steady_clock::now();
         pending.message = message;
         sequence = pending.sequence;
         pending_control_message_ = pending;
@@ -773,8 +875,11 @@ RendererHealthSnapshot RemoteStreamServer::rendererHealthSnapshot() const
 
 ServerStats RemoteStreamServer::stats() const
 {
-    std::lock_guard<std::mutex> lock(stats_mutex_);
-    ServerStats snapshot = stats_;
+    ServerStats snapshot;
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        snapshot = stats_;
+    }
     if (mjpeg_streamer_) {
         const MjpegStreamer::Stats stream_stats = mjpeg_streamer_->stats();
         snapshot.active_stream_clients = stream_stats.active_clients;
@@ -786,7 +891,14 @@ ServerStats RemoteStreamServer::stats() const
         snapshot.stream_width = stream_stats.output_width;
         snapshot.stream_height = stream_stats.output_height;
         snapshot.stream_fps = stream_stats.target_fps;
+        snapshot.stream_encoded_bytes_total = stream_stats.encoded_bytes_total;
+        snapshot.stream_encoded_bytes_last = stream_stats.encoded_bytes_last;
+        snapshot.stream_encoded_bytes_average = stream_stats.encoded_bytes_average;
+        snapshot.stream_capture_to_raw_ready_ms = {stream_stats.capture_to_raw_ready_ms.samples, stream_stats.capture_to_raw_ready_ms.average_ms, stream_stats.capture_to_raw_ready_ms.p50_ms, stream_stats.capture_to_raw_ready_ms.p95_ms, stream_stats.capture_to_raw_ready_ms.max_ms};
+        snapshot.stream_encode_ms = {stream_stats.encode_ms.samples, stream_stats.encode_ms.average_ms, stream_stats.encode_ms.p50_ms, stream_stats.encode_ms.p95_ms, stream_stats.encode_ms.max_ms};
+        snapshot.stream_capture_to_encoded_ms = {stream_stats.capture_to_encoded_ms.samples, stream_stats.capture_to_encoded_ms.average_ms, stream_stats.capture_to_encoded_ms.p50_ms, stream_stats.capture_to_encoded_ms.p95_ms, stream_stats.capture_to_encoded_ms.max_ms};
     }
+    snapshot.control_receive_to_apply_ms = summarizeControlLatencySamples();
     return snapshot;
 }
 

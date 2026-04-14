@@ -16,11 +16,24 @@ namespace sibr {
 
 class MjpegStreamer {
 public:
+    struct TimingSummary {
+        uint64_t samples = 0;
+        double average_ms = 0.0;
+        double p50_ms = 0.0;
+        double p95_ms = 0.0;
+        double max_ms = 0.0;
+    };
+
     struct EncodedFrame {
         uint64_t sequence = 0;
         uint64_t source_frame_index = 0;
+        uint64_t control_sequence = 0;
         int width = 0;
         int height = 0;
+        double capture_to_raw_ready_ms = 0.0;
+        double encode_ms = 0.0;
+        double capture_to_encoded_ms = 0.0;
+        uint64_t encoded_unix_time_ms = 0;
         std::shared_ptr<std::vector<unsigned char>> jpeg_bytes;
     };
 
@@ -34,6 +47,12 @@ public:
         int output_width = 0;
         int output_height = 0;
         int target_fps = 0;
+        uint64_t encoded_bytes_total = 0;
+        uint64_t encoded_bytes_last = 0;
+        double encoded_bytes_average = 0.0;
+        TimingSummary capture_to_raw_ready_ms;
+        TimingSummary encode_ms;
+        TimingSummary capture_to_encoded_ms;
     };
 
     explicit MjpegStreamer(ServerOptions options);
@@ -46,7 +65,7 @@ public:
     void removeClient();
     size_t clientCount() const;
 
-    void captureFrame(const IRenderTarget& render_target, uint64_t source_frame_index);
+    void captureFrame(const IRenderTarget& render_target, uint64_t source_frame_index, uint64_t control_sequence);
     void releaseRenderThreadResources();
 
     bool waitForFrameAfter(
@@ -65,6 +84,8 @@ private:
     void drainReadyReadbacks();
     void enqueueRawFrame(std::shared_ptr<RawFrame> frame);
     void encoderThreadMain();
+    void pushLatencySample(std::vector<double>& samples, double value_ms);
+    TimingSummary summarizeLatencySamples(const std::vector<double>& samples) const;
 
     ServerOptions options_;
 
@@ -90,6 +111,13 @@ private:
     mutable std::mutex latest_mutex_;
     mutable std::condition_variable latest_cv_;
     std::shared_ptr<const EncodedFrame> latest_frame_;
+
+    mutable std::mutex metrics_mutex_;
+    std::vector<double> capture_to_raw_ready_samples_ms_;
+    std::vector<double> encode_samples_ms_;
+    std::vector<double> capture_to_encoded_samples_ms_;
+    uint64_t encoded_bytes_total_ = 0;
+    uint64_t encoded_bytes_last_ = 0;
 
     std::thread encoder_thread_;
 };

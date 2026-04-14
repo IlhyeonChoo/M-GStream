@@ -1,5 +1,10 @@
 # SIBR Core
 
+Project-specific Ubuntu 24.04 remote browser stream guidance for `extended_gaussian` lives here:
+
+- `docs/extended_gaussian_ubuntu24_remote_browser_stream_user_guide_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_verification_report_ko.md`
+
 **SIBR** is a System for Image-Based Rendering.  
 It is built around the *sibr-core* in this repo and several *Projects* implementing published research papers.  
 For more complete documentation, see here: [SIBR Documentation](https://sibr.gitlabpages.inria.fr) 

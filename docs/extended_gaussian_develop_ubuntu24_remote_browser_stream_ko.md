@@ -787,10 +787,102 @@ M6 completion report:
 - validated runtime path this turn: installed binary, no-display --headless --server
 ```
 
-상세 코드 비교: `docs/source_diff_details_f1c9f3d_to_d30707f/`
+상세 코드 비교: `docs/source_diff_details_733ee7d_to_d30707f/`
 
 정리:
 
 - M6는 browser-side control contract 와 viewer camera apply path 를 실제 runtime 으로 연결하는 단계로 닫는다.
 - 이 시점부터 headless Ubuntu process 하나로 MJPEG preview 와 WebSocket camera control 이 모두 동작한다.
 - 남은 후속 범위는 UX 보강, reconnect/backoff, auth, richer control verbs 같은 확장 사항이다.
+
+
+## 16. 2026-04-13 M7 integration verification
+
+M7에서는 기능을 더 붙이지 않고, M1-M6 결과를 merge 판단 가능한 상태로 검증하고 문서화하는 데 집중했다.
+
+이번 턴에서 추가한 코드/도구 범위:
+
+- `apps/extended_gaussianViewer/main.cpp`
+  - pending control message consume 시 `received_at` 를 함께 받아 receive-to-apply latency 를 기록하도록 연결했다.
+  - 성공 apply 된 control sequence 를 `submitRenderedFrame(...)` 에 넘겨 MJPEG part header 와 health summary 가 같은 control sequence 를 공유하도록 정리했다.
+- `renderer/server/MjpegStreamer.*`
+  - encoded frame metadata 에 `control_sequence`, `capture_to_raw_ready_ms`, `encode_ms`, `capture_to_encoded_ms`, `encoded_unix_time_ms` 를 추가했다.
+  - stats 에 encoded bytes total/last/average 와 timing summary 를 추가했다.
+- `renderer/server/RemoteStreamServer.*`
+  - `/healthz` 에 stream/control timing summary 와 encoded byte stats 를 추가했다.
+  - `recordControlMessageApplied(...)` 가 receive-to-apply latency summary 를 유지하도록 정리했다.
+  - MJPEG part header 에 `X-Control-Sequence`, `X-Capture-To-Raw-Ready-Ms`, `X-Encode-Ms`, `X-Capture-To-Encoded-Ms`, `X-Encoded-Unix-Ms` 를 추가했다.
+- `tools/remote_stream/*`
+  - `measure_mjpeg.py`: part header timing, `X-Control-Sequence`, frames JSONL/CSV, control-to-visible proxy 계산 지원
+  - `collect_runtime_stats.py`: `/healthz` JSONL/CSV + `/proc/<pid>` RSS/VmSize/thread/fd sampling 지원
+  - `ws_control_smoke.mjs`, `ws_pose_flood.mjs`: M6/M7 control smoke / flood evidence 수집
+- 문서
+  - `docs/extended_gaussian_remote_browser_stream_verification_report_ko.md`
+  - `docs/extended_gaussian_ubuntu24_remote_browser_stream_user_guide_ko.md`
+  - `docs/extended_gaussian_remote_browser_stream_known_issues_ko.md`
+  - `README.md`, `docs/extended_gaussian_ubuntu24_toolchain_status_ko.md` 업데이트
+
+실제 검증 결과 (loopback, installed binary 기준):
+
+```text
+build / install:
+- cmake --build build-ninja --target extended_gaussianViewer_app --parallel: PASS
+- cmake --build build-ninja --target install --parallel: PASS
+
+server bring-up:
+- direct EGL init: PASS
+- CUDA/GL interop enabled: PASS
+- model load (bonsai, 1,076,487 gaussians): PASS
+- bind host/port: 127.0.0.1:18180 (18080은 기존 listener 사용 중이라 회피)
+
+HTTP/static:
+- /: 200
+- /app.js: 200
+- /styles.css: 200
+- /healthz: 200, version=m7-integration-verification
+- GET /control: 426 Upgrade Required
+
+single-client MJPEG (15s):
+- frames_received=205
+- measured_fps=13.6408
+- first_frame_delay_sec=0.1158
+- encode_p95_ms=6.914
+- capture_to_encoded_p95_ms=18.925
+
+two-client MJPEG (12s each):
+- client A frames_received=166, fps=13.8114
+- client B frames_received=166, fps=13.8189
+- active_clients=2 유지 확인
+
+WebSocket smoke:
+- ready: PASS
+- invalid payload -> error: PASS
+- valid payload -> ack: PASS
+- health correlation: messages_applied / last_applied_sequence / camera_pose update 확인
+
+WebSocket orbit flood (10s, 5Hz):
+- sentPayloads=50
+- ackCount=50
+- errorCount=0
+- receive_to_apply p95=7.575ms
+
+control-to-encoded proxy:
+- ack sequence=52
+- first MJPEG frame with X-Control-Sequence=52 observed
+- ack_to_encoded_ms=69
+
+120s loopback soak:
+- frames_received=1690
+- measured_fps=14.0780
+- health samples=24, failures=0
+- RSS drift=+28 KB (+0.005%)
+```
+
+M7 merge gate 관점 정리:
+
+- loopback protocol / process / performance evidence는 통과했다.
+- 아직 browser executable 이 현재 shell PATH 에 없어서 LAN browser page open 과 browser-visible control-to-visible 은 `SKIP_ENV` 로 남겼다.
+- 1-hour soak 와 clean SHA rerun 은 이번 턴에서 수행하지 못해 `BLOCKED` 로 남겼다.
+- 최종 상태는 `implementation ready, verification partial pass` 로 기록한다.
+
+상세 코드 비교: `docs/source_diff_details_d30707f_to_0d9f177/`

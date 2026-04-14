@@ -907,3 +907,68 @@ M6에서 `/control` WebSocket runtime 과 viewer main-thread camera apply 경로
 - 상세 코드 비교: `docs/source_diff_details_733ee7d_to_d30707f/`
 
 이 시점 기준 M6는 WebSocket control contract / latest-only queue / main-thread camera apply / health metrics 범위에서 닫고, UX 고도화나 추가 control verbs 는 후속 범위로 둔다.
+
+
+## 14. 2026-04-13 M7 integration verification and tooling
+
+M7에서는 기능 범위를 넓히지 않고, M1-M6 결과를 실제 수치와 보고서로 고정하기 위한 verification instrumentation 과 helper tooling 을 추가했다.
+
+수정 파일:
+
+- `README.md`
+- `docs/extended_gaussian_remote_browser_stream_manual_checklist_ko.md`
+- `docs/extended_gaussian_ubuntu24_remote_browser_stream_user_guide_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_known_issues_ko.md`
+- `docs/extended_gaussian_remote_browser_stream_verification_report_ko.md`
+- `docs/extended_gaussian_ubuntu24_toolchain_status_ko.md`
+- `docs/extended_gaussian_develop_ubuntu24_remote_browser_stream_ko.md`
+- `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
+- `src/projects/extended_gaussian/renderer/server/MjpegStreamer.hpp`
+- `src/projects/extended_gaussian/renderer/server/MjpegStreamer.cpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp`
+- `src/projects/extended_gaussian/renderer/server/RemoteStreamServer.cpp`
+- `tools/remote_stream/measure_mjpeg.py`
+- `tools/remote_stream/collect_runtime_stats.py`
+- `tools/remote_stream/ws_control_smoke.mjs`
+- `tools/remote_stream/ws_pose_flood.mjs`
+- `tools/remote_stream/README.md`
+
+적용한 변경:
+
+- `main.cpp`
+  - pending control message consume 시 `received_at` 를 함께 받아 `recordControlMessageApplied(..., receive_to_apply_ms)` 로 넘기도록 연결했다.
+  - apply 성공한 control sequence 를 render submit 경로에 전달해 stream frame 메타데이터와 control apply 결과를 같은 sequence 로 추적할 수 있게 했다.
+- `MjpegStreamer`
+  - encoded frame metadata 에 `control_sequence`, timing header 값, encoded unix timestamp 를 추가했다.
+  - stats 에 encoded bytes total/last/average 와 timing summary (`capture_to_raw_ready`, `encode`, `capture_to_encoded`) 를 추가했다.
+- `RemoteStreamServer`
+  - `/healthz` 에 stream/control timing summary 와 encoded byte stats 를 추가했다.
+  - MJPEG part header 에 M7용 tracing header (`X-Control-Sequence`, `X-Capture-To-Raw-Ready-Ms`, `X-Encode-Ms`, `X-Capture-To-Encoded-Ms`, `X-Encoded-Unix-Ms`) 를 추가했다.
+  - control receive-to-apply latency sample 집계를 추가했다.
+- `tools/remote_stream`
+  - `measure_mjpeg.py` 는 frames CSV/JSONL, timing summary, sequence gap, control-to-visible proxy 계산을 지원하도록 확장했다.
+  - `collect_runtime_stats.py` 는 `/healthz` JSONL/CSV 와 `/proc/<pid>` RSS/VmSize/thread/fd drift 샘플링을 지원하도록 확장했다.
+  - `README.md` 를 실제 M7 실행 명령 기준으로 정리했다.
+- 문서
+  - verification report 를 새로 추가하고, user guide / known issues / checklist / branch log / toolchain status / README 를 M7 기준으로 연결했다.
+
+검증 결과:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- installed binary loopback server startup 통과
+- `/`, `/app.js`, `/styles.css`, `/healthz`, `GET /control` 확인 완료
+- single-client MJPEG: 205 frames / 15.03 sec / 13.64 FPS
+- two-client MJPEG: 양쪽 166 frames / 약 13.81 FPS, `active_clients=2`
+- WebSocket smoke: `ready`, `error`, `ack`, pose apply correlation 확인
+- orbit flood: 50 payload / 50 ack, receive-to-apply p95 7.575ms
+- control-to-encoded proxy: ack 이후 first `X-Control-Sequence` frame까지 69ms
+- 120초 loopback soak: 1690 frames / 14.08 FPS / health sample 24회 / RSS drift +28 KB
+
+현재 기준 M7의 남은 항목:
+
+- browser executable 이 없는 shell 환경 때문에 LAN browser / browser-visible control-to-visible 은 `SKIP_ENV`
+- 1-hour soak 와 clean SHA rerun 은 `BLOCKED`
+- 따라서 verification report 의 최종 판정은 `partial pass` 이다.
+
+- 상세 코드 비교: `docs/source_diff_details_d30707f_to_0d9f177/`

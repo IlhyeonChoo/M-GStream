@@ -1,8 +1,8 @@
 # Remote Browser Stream Manual Checklist
 
 작성일: 2026-04-08  
-최신 갱신: 2026-04-13 M6 기준
-적용 시점: M5에서 `/stream.mjpg`가 실제로 연결된 이후. 현재 문서는 M6 `/control` WebSocket contract 까지 반영한다.
+최신 갱신: 2026-04-13 M7 기준
+적용 시점: M5에서 `/stream.mjpg`가 실제로 연결된 이후. 현재 문서는 M6 `/control` WebSocket contract 와 M7 verification report 기준을 반영한다.
 
 ## 1. 목적
 
@@ -11,6 +11,12 @@
 
 이 문서는 후속 브랜치가 실제 runtime을 붙인 뒤
 최소한 무엇을 확인해야 하는지 체크리스트 형태로 정리한다.
+
+M7부터는 이 문서 자체를 삭제하지 않고, 실제 실행 결과는 아래 report에 `RUN_PASS`, `RUN_FAIL`, `SKIP_SCOPE`, `SKIP_ENV`, `BLOCKED` 상태로 기록한다.
+
+```text
+docs/extended_gaussian_remote_browser_stream_verification_report_ko.md
+```
 
 ## 2. 사전 조건
 

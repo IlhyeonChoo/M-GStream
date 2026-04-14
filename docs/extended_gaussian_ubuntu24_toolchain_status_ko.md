@@ -229,3 +229,32 @@ install/bin/extended_gaussianViewer_app --width 1280 --height 720 --vsync 0
 - Xvfb / Mesa GL에서의 segfault는 desktop-viewer 완료 조건으로 보지 않는다. 다만 headless work에서는 CUDA / GL interop를 명시적으로 분리해야 한다.
 - `/usr/bin/nvcc` CUDA 12.0 wrapper가 남아 있다. 이 workspace에서는 CUDA 12.8 compiler path를 configure에 명시해야 한다.
 - remote server, MJPEG, WebSocket, snapshot, OOM fix는 M1에서 시작하지 않았다.
+
+
+## 11. 2026-04-13 remote-browser-stream M7 follow-up
+
+주의: 이 문서는 원래 `develop/ubuntu24-desktop-server` 의 M1 build bootstrap 상태를 기록하기 위해 시작했다.
+아래는 그 이후 `develop/ubuntu24-remote-browser-stream` 브랜치에서 같은 Ubuntu 24.04 호스트로 수행한 M7 loopback verification follow-up 이다.
+
+이번 follow-up 에서 확인한 것:
+
+- `cmake --build build-ninja --target extended_gaussianViewer_app --parallel` 통과
+- `cmake --build build-ninja --target install --parallel` 통과
+- installed binary direct headless EGL startup 통과
+- installed binary `--headless --server --path ../gaussian-splatting/eval/bonsai` 로 remote stream bring-up 통과
+- `/healthz`, `/`, `/app.js`, `/styles.css`, `GET /control` loopback smoke 통과
+- single-client / two-client MJPEG 측정 통과
+- WebSocket `ready/error/ack` 및 pose apply correlation 통과
+- 120초 local soak 에서 RSS drift +28 KB (+0.005%)
+
+이번 follow-up 에서 닫지 못한 것:
+
+- browser executable 이 없는 현재 shell 환경에서는 실제 browser page open 과 browser-visible control-to-visible 을 증명하지 못했다.
+- 1-hour soak 는 아직 수행하지 않았다.
+- clean SHA 기준 rerun 도 아직 수행하지 않았다.
+
+최신 상세 결과는 아래 문서를 기준으로 본다.
+
+```text
+docs/extended_gaussian_remote_browser_stream_verification_report_ko.md
+```

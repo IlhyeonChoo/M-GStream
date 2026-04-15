@@ -45,6 +45,29 @@
     </section>
 
     <section class="panel">
+      <h2>Camera Control</h2>
+      <div class="actions">
+        <button id="toggle-camera" type="button">Enable Camera Control</button>
+      </div>
+      <div class="grid two-col">
+        <label>
+          <span>Move speed</span>
+          <input id="move-speed" type="range" min="0.05" max="5.0" step="0.05" value="0.6">
+        </label>
+        <label>
+          <span>Rotate speed (deg/s)</span>
+          <input id="rotate-speed" type="range" min="5" max="120" step="1" value="30">
+        </label>
+      </div>
+      <div class="key-legend">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> Up / Down</span>
+        <span><kbd>Up</kbd><kbd>Down</kbd><kbd>Left</kbd><kbd>Right</kbd> Rotate</span>
+        <span>Drag to look / Scroll to zoom</span>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>Camera Pose</h2>
       <div class="grid three-col">
         <label>

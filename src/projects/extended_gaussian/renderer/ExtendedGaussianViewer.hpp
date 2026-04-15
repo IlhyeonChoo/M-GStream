@@ -9,6 +9,9 @@
 #include <projects/extended_gaussian/renderer/resource/ResourceManager.hpp>
 #include <projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.hpp>
 
+#include <cstddef>
+#include <vector>
+
 namespace sibr {
 	class RenderingSystem;
 
@@ -61,6 +64,9 @@ namespace sibr {
 		double getAppTimeSeconds() const;
 		uint64_t getFrameIndex() const;
 		const std::string& getCurrentPhase() const;
+		void setCurrentPhase(const std::string& phase);
+		std::vector<std::string> getAvailablePhases() const;
+		size_t getManifestAssetCount() const;
 
 	private:
 		bool loadManifestFile(const std::string& path);

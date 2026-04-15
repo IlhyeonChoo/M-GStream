@@ -1,6 +1,8 @@
 const state = {
   socket: null,
   cameraController: null,
+  healthPollTimer: null,
+  manifestInfo: null,
 };
 
 const MIN_VECTOR_NORM = 1e-6;
@@ -197,6 +199,154 @@ function setCameraControlButtonState(active) {
   button.classList.toggle("active", active);
 }
 
+function setHealthPollButtonState(active) {
+  const button = $("toggle-health-poll");
+  button.textContent = active ? "Stop Health Poll" : "Start Health Poll";
+  button.classList.toggle("active", active);
+}
+
+function configuredHttpOrigin() {
+  const value = $("http-origin").value.trim();
+  return value || currentHttpOrigin();
+}
+
+function updateManifestPanel(info) {
+  const panel = $("manifest-panel");
+  const select = $("phase-select");
+  const custom = $("phase-custom");
+  const totalAssets = $("total-assets");
+
+  state.manifestInfo = info || null;
+  if (!info || !info.has_manifest) {
+    panel.style.display = "none";
+    select.innerHTML = '<option value="">(none)</option>';
+    select.value = "";
+    custom.value = "";
+    totalAssets.value = "--";
+    clearHealthPoll();
+    updateStreamingStats(null);
+    return;
+  }
+
+  panel.style.display = "";
+  const availablePhases = Array.isArray(info.available_phases) ? info.available_phases : [];
+  const currentPhase = typeof info.current_phase === "string" ? info.current_phase : "";
+  const uniquePhases = [];
+  const seen = new Set();
+  availablePhases.forEach((phase) => {
+    if (typeof phase !== "string" || seen.has(phase)) {
+      return;
+    }
+    seen.add(phase);
+    uniquePhases.push(phase);
+  });
+
+  select.innerHTML = '<option value="">(none)</option>';
+  uniquePhases.forEach((phase) => {
+    const option = document.createElement("option");
+    option.value = phase;
+    option.textContent = phase;
+    select.appendChild(option);
+  });
+
+  if (currentPhase && seen.has(currentPhase)) {
+    select.value = currentPhase;
+    custom.value = "";
+  } else {
+    select.value = "";
+    custom.value = currentPhase;
+  }
+
+  totalAssets.value = Number.isFinite(Number(info.total_assets)) ? String(info.total_assets) : "--";
+}
+
+function formatBytes(bytes) {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "--";
+  }
+  return `${(numeric / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updateStreamingStats(renderer) {
+  const streaming = renderer && renderer.streaming ? renderer.streaming : null;
+  const values = {
+    "stat-required-gpu": streaming ? String(streaming.required_gpu ?? "--") : "--",
+    "stat-warm-cpu": streaming ? String(streaming.warm_cpu ?? "--") : "--",
+    "stat-pending-disk": streaming ? String(streaming.pending_disk_loads ?? "--") : "--",
+    "stat-pending-upload": streaming ? String(streaming.pending_gpu_uploads ?? "--") : "--",
+    "stat-pending-evict": streaming ? String(streaming.pending_gpu_evictions ?? "--") : "--",
+    "stat-cpu-resident": streaming ? formatBytes(streaming.cpu_resident_bytes) : "--",
+    "stat-gpu-resident": streaming ? formatBytes(streaming.gpu_resident_bytes) : "--",
+    "stat-swap-hits": streaming ? String(streaming.swap_hits ?? "--") : "--",
+    "stat-swap-misses": streaming ? String(streaming.swap_misses ?? "--") : "--",
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    $(id).value = value;
+  });
+}
+
+async function pollHealthz() {
+  const response = await fetch(new URL("/healthz", configuredHttpOrigin()).toString(), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Health request failed: HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!payload.ok || !payload.renderer) {
+    throw new Error("Health response did not include renderer state.");
+  }
+
+  updateManifestPanel(payload.renderer);
+  updateStreamingStats(payload.renderer);
+}
+
+function clearHealthPoll() {
+  if (state.healthPollTimer !== null) {
+    window.clearInterval(state.healthPollTimer);
+    state.healthPollTimer = null;
+  }
+  setHealthPollButtonState(false);
+}
+
+function toggleHealthPoll() {
+  if (state.healthPollTimer !== null) {
+    clearHealthPoll();
+    setStatus("Health polling stopped.");
+    return;
+  }
+
+  pollHealthz()
+    .then(() => {
+      state.healthPollTimer = window.setInterval(() => {
+        pollHealthz().catch((error) => {
+          setStatus(error.message, true);
+          clearHealthPoll();
+        });
+      }, 1000);
+      setHealthPollButtonState(true);
+      setStatus("Health polling started.");
+    })
+    .catch((error) => {
+      setStatus(error.message, true);
+    });
+}
+
+function applyPhase() {
+  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+    throw new Error("WebSocket is not connected.");
+  }
+
+  const phase = $("phase-custom").value.trim() || $("phase-select").value;
+
+  state.socket.send(JSON.stringify({ type: "set_phase", phase }));
+  if (state.manifestInfo) {
+    updateManifestPanel({ ...state.manifestInfo, has_manifest: true, current_phase: phase });
+  }
+  setStatus(`Phase control sent: ${phase || "(none)"}`);
+}
+
 function buildPayloadObject() {
   const fovy = Number($("fovy").value);
   if (!Number.isFinite(fovy)) {
@@ -222,7 +372,7 @@ function formatPayload() {
 }
 
 function openStream() {
-  const origin = $("http-origin").value.trim();
+  const origin = configuredHttpOrigin();
   const streamUrl = new URL("/stream.mjpg", origin).toString();
   $("stream-preview").src = streamUrl;
   setStatus(`Stream opened: ${streamUrl}`);
@@ -590,6 +740,7 @@ function connectSocket() {
       state.cameraController.deactivate();
       setCameraControlButtonState(false);
     }
+    clearHealthPoll();
     if (state.socket === socket) {
       state.socket = null;
     }
@@ -609,6 +760,12 @@ function connectSocket() {
             state.cameraController.initFromPose(message.camera_pose);
           }
         }
+        updateManifestPanel({
+          has_manifest: message.has_manifest,
+          current_phase: message.current_phase,
+          available_phases: message.available_phases,
+          total_assets: message.total_assets,
+        });
         setStatus("WebSocket ready. Camera pose synchronized.");
         return;
       }
@@ -617,6 +774,9 @@ function connectSocket() {
         return;
       }
       if (message.type === "ack") {
+        if (message.request_type === "set_phase") {
+          setStatus(`Phase request queued (seq=${message.sequence}).`);
+        }
         return;
       }
     } catch (error) {
@@ -676,6 +836,9 @@ function applyDefaults() {
   $("ws-url").value = currentWsUrl();
   $("move-speed").value = String(DEFAULT_MOVE_SPEED);
   $("rotate-speed").value = String(DEFAULT_ROTATE_SPEED);
+  clearHealthPoll();
+  updateManifestPanel(null);
+  updateStreamingStats(null);
   setCameraControlButtonState(false);
   syncPoseUi({
     position: [0, 0, 0],
@@ -727,6 +890,20 @@ function bindActions() {
       setStatus(error.message, true);
     }
   });
+  $("apply-phase").addEventListener("click", () => {
+    try {
+      applyPhase();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+  $("toggle-health-poll").addEventListener("click", () => {
+    try {
+      toggleHealthPoll();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
   $("move-speed").addEventListener("input", (event) => {
     if (state.cameraController) {
       state.cameraController.moveSpeed = Number(event.target.value);
@@ -735,6 +912,16 @@ function bindActions() {
   $("rotate-speed").addEventListener("input", (event) => {
     if (state.cameraController) {
       state.cameraController.rotateSpeed = Number(event.target.value);
+    }
+  });
+  $("phase-select").addEventListener("change", (event) => {
+    if (event.target.value) {
+      $("phase-custom").value = "";
+    }
+  });
+  $("phase-custom").addEventListener("input", (event) => {
+    if (event.target.value.trim()) {
+      $("phase-select").value = "";
     }
   });
 }

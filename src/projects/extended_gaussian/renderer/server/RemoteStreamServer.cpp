@@ -351,6 +351,28 @@ std::string healthJson(
     if (renderer.has_camera_pose) {
         stream << ",\n    \"camera_pose\": " << cameraPoseJson(renderer.camera_pose);
     }
+    stream << ",\n    \"current_phase\": \"" << jsonEscape(renderer.current_phase) << "\"";
+    stream << ",\n    \"available_phases\": [";
+    for (size_t index = 0; index < renderer.available_phases.size(); ++index) {
+        if (index > 0) {
+            stream << ",";
+        }
+        stream << "\"" << jsonEscape(renderer.available_phases[index]) << "\"";
+    }
+    stream << "]";
+    stream << ",\n    \"total_assets\": " << renderer.total_asset_count;
+    stream << ",\n    \"streaming\": {"
+           << "\"required_gpu\":" << renderer.required_gpu_count
+           << ",\"warm_cpu\":" << renderer.warm_cpu_count
+           << ",\"pending_disk_loads\":" << renderer.pending_disk_loads
+           << ",\"pending_gpu_uploads\":" << renderer.pending_gpu_uploads
+           << ",\"pending_gpu_evictions\":" << renderer.pending_gpu_evictions
+           << ",\"cpu_resident_bytes\":" << renderer.cpu_resident_bytes
+           << ",\"gpu_resident_bytes\":" << renderer.gpu_resident_bytes
+           << ",\"skipped_instances\":" << renderer.skipped_instances_last_frame
+           << ",\"swap_hits\":" << renderer.swap_hits
+           << ",\"swap_misses\":" << renderer.swap_misses
+           << "}";
     stream
         << "\n  }\n"
         << "}";
@@ -377,11 +399,23 @@ std::string controlReadyJson(const sibr::RendererHealthSnapshot& renderer)
     stream
         << ",\"frame_index\":" << renderer.frame_index
         << ",\"app_time_sec\":" << renderer.app_time_sec
+        << ",\"has_manifest\":" << (renderer.has_manifest ? "true" : "false")
+        << ",\"current_phase\":\"" << jsonEscape(renderer.current_phase) << "\""
+        << ",\"available_phases\":[";
+    for (size_t index = 0; index < renderer.available_phases.size(); ++index) {
+        if (index > 0) {
+            stream << ",";
+        }
+        stream << "\"" << jsonEscape(renderer.available_phases[index]) << "\"";
+    }
+    stream
+        << "]"
+        << ",\"total_assets\":" << renderer.total_asset_count
         << "}";
     return stream.str();
 }
 
-std::string controlAckJson(uint64_t sequence, bool superseded_previous)
+std::string controlAckJson(uint64_t sequence, bool superseded_previous, const char* request_type)
 {
     std::ostringstream stream;
     const uint64_t server_ack_unix_ms = unixTimeMillisecondsNow();
@@ -389,7 +423,7 @@ std::string controlAckJson(uint64_t sequence, bool superseded_previous)
         << "{"
         << "\"ok\":true,"
         << "\"type\":\"ack\","
-        << "\"request_type\":\"set_camera_pose\","
+        << "\"request_type\":\"" << request_type << "\","
         << "\"status\":\"queued\","
         << "\"queue_mode\":\"latest_only\","
         << "\"sequence\":" << sequence << ","
@@ -1265,7 +1299,9 @@ void RemoteStreamServer::serverThreadMain()
                                 continue;
                             }
 
-                            response_payload = controlAckJson(sequence, superseded_previous);
+                            const char* request_type =
+                                parsed.message.type == ControlMessageType::SetPhase ? "set_phase" : "set_camera_pose";
+                            response_payload = controlAckJson(sequence, superseded_previous, request_type);
                             if (!writeWebSocketText(ws, response_payload, ws_error)) {
                                 break;
                             }

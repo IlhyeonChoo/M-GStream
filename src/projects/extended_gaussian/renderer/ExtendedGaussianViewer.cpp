@@ -473,6 +473,21 @@ namespace sibr {
 		return _currentPhase;
 	}
 
+	void ExtendedGaussianViewer::setCurrentPhase(const std::string& phase)
+	{
+		_currentPhase = phase;
+	}
+
+	std::vector<std::string> ExtendedGaussianViewer::getAvailablePhases() const
+	{
+		return _manifestStore.phases();
+	}
+
+	size_t ExtendedGaussianViewer::getManifestAssetCount() const
+	{
+		return _manifestStore.assets().size();
+	}
+
 	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path)
 	{
 		if (!_manifestStore.load(path)) {

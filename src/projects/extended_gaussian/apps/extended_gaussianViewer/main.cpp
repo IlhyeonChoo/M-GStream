@@ -10,6 +10,7 @@
 #include "projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp"
 #include "projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.hpp"
 #if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#include "projects/extended_gaussian/renderer/subsystem/rendering_system/SwapManager.hpp"
 #include "projects/extended_gaussian/renderer/server/CameraPoseAdapter.hpp"
 #include "projects/extended_gaussian/renderer/server/RemoteStreamServer.hpp"
 #include "projects/extended_gaussian/renderer/server/ServerProtocol.hpp"
@@ -68,6 +69,25 @@ RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& 
         snapshot.has_camera_pose = true;
         snapshot.camera_pose = ExportRemoteCameraPose(gaussian_view_camera);
     }
+
+    snapshot.current_phase = viewer.getCurrentPhase();
+    snapshot.available_phases = viewer.getAvailablePhases();
+    snapshot.total_asset_count = viewer.getManifestAssetCount();
+
+    if (rendering_system != nullptr) {
+        if (const SwapManager::Stats* swap = rendering_system->getSwapStats()) {
+            snapshot.required_gpu_count = swap->required_gpu_count;
+            snapshot.warm_cpu_count = swap->warm_cpu_count;
+            snapshot.pending_disk_loads = swap->pending_disk_loads;
+            snapshot.pending_gpu_uploads = swap->pending_gpu_uploads;
+            snapshot.pending_gpu_evictions = swap->pending_gpu_evictions;
+            snapshot.cpu_resident_bytes = swap->cpu_resident_bytes;
+            snapshot.gpu_resident_bytes = swap->gpu_resident_bytes;
+            snapshot.skipped_instances_last_frame = swap->skipped_instances_last_frame;
+            snapshot.swap_hits = swap->swap_hits;
+            snapshot.swap_misses = swap->swap_misses;
+        }
+    }
     return snapshot;
 }
 
@@ -101,6 +121,11 @@ void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewe
             TryBuildInputCamera(message.camera_pose, camera, apply_error)) {
             applied = viewer.applyGaussianViewCamera(camera, apply_error);
         }
+        break;
+    }
+    case ControlMessageType::SetPhase: {
+        viewer.setCurrentPhase(message.phase);
+        applied = true;
         break;
     }
     }

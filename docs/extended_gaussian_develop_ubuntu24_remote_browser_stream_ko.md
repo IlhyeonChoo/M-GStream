@@ -929,3 +929,61 @@ M8에서는 서버 C++ 경로를 건드리지 않고, 브라우저 reference cli
 - 다른 컴퓨터에서 접속하려면 `--listen-host 127.0.0.1` 대신 Tailscale IP 또는 `0.0.0.0` 로 다시 실행해야 한다. 이 부분은 M8 변경 범위가 아니라 기존 서버 bind 정책 문제다.
 
 상세 코드 비교: `docs/source_diff_details_7627561_to_53ed390/`
+
+
+## 2026-04-15 manifest remote stream phase/status bridge
+
+이번 단계에서는 기존 headless remote browser stream 을 single-model only 상태에서 한 단계 확장해, manifest 기반 스트리밍에서도 browser 쪽에서 phase 와 streaming 상태를 직접 다룰 수 있게 정리했다.
+
+추가된 runtime contract:
+
+- WebSocket control
+  - 새 control verb: `set_phase`
+  - `ack.request_type` 으로 `set_camera_pose` / `set_phase` 구분
+- WebSocket `ready`
+  - `has_manifest`, `current_phase`, `available_phases`, `total_assets` 추가
+- `/healthz`
+  - `renderer.current_phase`
+  - `renderer.available_phases`
+  - `renderer.total_assets`
+  - `renderer.streaming.{required_gpu,warm_cpu,pending_disk_loads,pending_gpu_uploads,pending_gpu_evictions,cpu_resident_bytes,gpu_resident_bytes,skipped_instances,swap_hits,swap_misses}` 추가
+- browser `www` client
+  - `Manifest Status` 패널
+  - phase dropdown + custom input
+  - `Apply Phase` button
+  - `Start/Stop Health Poll` button
+  - 1 Hz `/healthz` polling 으로 streaming stats live 갱신
+
+핵심 구현 포인트:
+
+- `ServerProtocol` 은 `set_phase` payload 를 별도 분기로 파싱하고 camera pose validation 과 분리했다.
+- `ExtendedGaussianViewer` 는 remote control 경로에서 바로 사용할 수 있도록 phase setter/getter 와 manifest summary getter 를 공개했다.
+- `main.cpp` 는 `SetPhase` 를 viewer `_currentPhase` 변경으로 연결하고, health snapshot 에 `SwapManager::Stats` 를 실었다.
+- `RemoteStreamServer` 는 `/healthz`, `ready`, `ack` 를 모두 확장해 browser client 가 별도 ImGui 없이도 manifest 상태를 관찰할 수 있게 했다.
+- browser client 는 `set_phase` 단발 요청만 status line 에 노출하고, 연속 `set_camera_pose` ack 는 여전히 숨겨 camera control UX 의 노이즈를 줄였다.
+
+실제 검증:
+
+```text
+build:
+- cmake --build build-ninja --target extended_gaussianViewer_app --parallel: PASS
+- cmake --install build-ninja: PASS
+
+browser asset sanity:
+- node --check src/projects/extended_gaussian/renderer/server/www/app.js: PASS
+- GET / on runtime server: Manifest Status / phase-select / toggle-health-poll 확인
+
+manifest runtime (local temporary manifest, absolute model path -> ../CityGaussianV1/output/mc_small_aerial_c36):
+- /healthz: current_phase=alpha, available_phases=[alpha,beta], total_assets=1 확인
+- ws_control_smoke.mjs: ready.has_manifest=true 확인
+- ws_control_smoke.mjs: ack.request_type=set_phase 확인
+- follow-up /healthz: current_phase=default_phase 반영 확인
+```
+
+운영상 정리:
+
+- 이제 manifest mode 에서도 headless browser client 만으로 현재 phase 와 streaming 상태를 볼 수 있고, phase 전환을 시도할 수 있다.
+- phase validation 은 intentionally 없음. desktop ImGui 와 같은 정책으로 arbitrary string 을 허용하고, rule 이 없으면 결과는 no-op 이다.
+- 보안/TLS/auth 부재는 여전히 기존 서버 제약 그대로다. public bind 에서는 조심해야 한다.
+
+상세 코드 비교: `docs/source_diff_details_44a8416_to_manifest_remote_stream/`

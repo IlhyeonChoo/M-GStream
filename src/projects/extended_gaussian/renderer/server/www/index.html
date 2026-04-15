@@ -67,6 +67,38 @@
       </div>
     </section>
 
+    <section class="panel" id="manifest-panel" style="display:none;">
+      <h2>Manifest Status</h2>
+      <div class="grid two-col">
+        <label>
+          <span>Current Phase</span>
+          <div class="phase-control">
+            <select id="phase-select"><option value="">(none)</option></select>
+            <input id="phase-custom" type="text" placeholder="Custom phase...">
+          </div>
+        </label>
+        <label>
+          <span>Total Assets</span>
+          <input id="total-assets" type="text" value="--" readonly>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="apply-phase" type="button">Apply Phase</button>
+        <button id="toggle-health-poll" type="button">Start Health Poll</button>
+      </div>
+      <div class="grid three-col streaming-stats">
+        <label><span>Required GPU</span><input id="stat-required-gpu" type="text" value="--" readonly></label>
+        <label><span>Warm CPU</span><input id="stat-warm-cpu" type="text" value="--" readonly></label>
+        <label><span>Pending Disk</span><input id="stat-pending-disk" type="text" value="--" readonly></label>
+        <label><span>Pending Upload</span><input id="stat-pending-upload" type="text" value="--" readonly></label>
+        <label><span>Pending Evict</span><input id="stat-pending-evict" type="text" value="--" readonly></label>
+        <label><span>CPU Resident</span><input id="stat-cpu-resident" type="text" value="--" readonly></label>
+        <label><span>GPU Resident</span><input id="stat-gpu-resident" type="text" value="--" readonly></label>
+        <label><span>Swap Hits</span><input id="stat-swap-hits" type="text" value="--" readonly></label>
+        <label><span>Swap Misses</span><input id="stat-swap-misses" type="text" value="--" readonly></label>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>Camera Pose</h2>
       <div class="grid three-col">

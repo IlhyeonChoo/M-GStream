@@ -27,12 +27,14 @@ namespace sibr {
 	};
 
 	enum class ControlMessageType {
-		SetCameraPose
+		SetCameraPose,
+		SetPhase
 	};
 
 	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ControlMessage {
 		ControlMessageType type = ControlMessageType::SetCameraPose;
 		RemoteCameraPose camera_pose;
+		std::string phase;
 	};
 
 	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ParseControlMessageResult {

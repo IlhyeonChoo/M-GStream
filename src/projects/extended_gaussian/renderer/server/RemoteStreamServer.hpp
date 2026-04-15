@@ -5,6 +5,7 @@
 #include "ServerProtocol.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -33,6 +34,19 @@ struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RendererHealthSnapshot {
     double app_time_sec = 0.0;
     bool has_camera_pose = false;
     RemoteCameraPose camera_pose;
+    std::string current_phase;
+    std::vector<std::string> available_phases;
+    size_t total_asset_count = 0;
+    size_t required_gpu_count = 0;
+    size_t warm_cpu_count = 0;
+    size_t pending_disk_loads = 0;
+    size_t pending_gpu_uploads = 0;
+    size_t pending_gpu_evictions = 0;
+    size_t cpu_resident_bytes = 0;
+    size_t gpu_resident_bytes = 0;
+    size_t skipped_instances_last_frame = 0;
+    size_t swap_hits = 0;
+    size_t swap_misses = 0;
 };
 
 struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerStats {

@@ -181,33 +181,38 @@ namespace sibr {
 			return result;
 		}
 
-		if (type != "set_camera_pose") {
-			result.error = "Unsupported control message type '" + type + "'.";
-			return result;
-		}
-
 		ControlMessage message;
-		message.type = ControlMessageType::SetCameraPose;
+		if (type == "set_camera_pose") {
+			message.type = ControlMessageType::SetCameraPose;
 
-		if (!parseVector3Field(object, "position", message.camera_pose.position, result.error)) {
-			return result;
-		}
-		if (!parseVector3Field(object, "forward", message.camera_pose.forward, result.error)) {
-			return result;
-		}
-		if (!parseVector3Field(object, "up", message.camera_pose.up, result.error)) {
-			return result;
-		}
-		if (!parseFloatField(object, "fovy", message.camera_pose.fovy, result.error)) {
-			return result;
-		}
+			if (!parseVector3Field(object, "position", message.camera_pose.position, result.error)) {
+				return result;
+			}
+			if (!parseVector3Field(object, "forward", message.camera_pose.forward, result.error)) {
+				return result;
+			}
+			if (!parseVector3Field(object, "up", message.camera_pose.up, result.error)) {
+				return result;
+			}
+			if (!parseFloatField(object, "fovy", message.camera_pose.fovy, result.error)) {
+				return result;
+			}
 
-		if (message.camera_pose.fovy <= 0.0f || message.camera_pose.fovy >= kPi) {
-			result.error = "Field 'fovy' must be in the open interval (0, pi).";
-			return result;
-		}
+			if (message.camera_pose.fovy <= 0.0f || message.camera_pose.fovy >= kPi) {
+				result.error = "Field 'fovy' must be in the open interval (0, pi).";
+				return result;
+			}
 
-		if (!ValidateRemoteCameraPose(message.camera_pose, result.error)) {
+			if (!ValidateRemoteCameraPose(message.camera_pose, result.error)) {
+				return result;
+			}
+		} else if (type == "set_phase") {
+			message.type = ControlMessageType::SetPhase;
+			if (!parseStringField(object, "phase", message.phase, result.error)) {
+				return result;
+			}
+		} else {
+			result.error = "Unsupported control message type '" + type + "'.";
 			return result;
 		}
 

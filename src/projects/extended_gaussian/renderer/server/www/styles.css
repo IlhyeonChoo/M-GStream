@@ -281,3 +281,28 @@ code {
     padding: 18px;
   }
 }
+
+.phase-control {
+  display: flex;
+  gap: 8px;
+}
+
+.phase-control select {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+}
+
+.phase-control input {
+  flex: 1;
+}
+
+.streaming-stats input[readonly] {
+  background: rgba(11, 122, 117, 0.06);
+  text-align: center;
+  font-family: "IBM Plex Mono", monospace;
+}

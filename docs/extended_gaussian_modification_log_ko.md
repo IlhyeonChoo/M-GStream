@@ -972,3 +972,43 @@ M7에서는 기능 범위를 넓히지 않고, M1-M6 결과를 실제 수치와 
 - 따라서 verification report 의 최종 판정은 `partial pass` 이다.
 
 - 상세 코드 비교: `docs/source_diff_details_d30707f_to_0d9f177/`
+
+
+## 15. 2026-04-15 M8 browser camera control
+
+M8에서는 `www` reference client 에 브라우저 실시간 카메라 제어를 추가했다. 서버 프로토콜은 그대로 두고, 기존 `set_camera_pose` 메시지와 `ready.camera_pose` 초기화 경로를 재사용하는 방향으로 정리했다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/renderer/server/www/app.js`
+- `src/projects/extended_gaussian/renderer/server/www/index.html`
+- `src/projects/extended_gaussian/renderer/server/www/styles.css`
+
+적용한 변경:
+
+- `app.js`
+  - `CameraController` 클래스를 추가해 브라우저 입력을 camera pose 업데이트와 WebSocket 전송으로 연결했다.
+  - `WASD`, `Q/E`, 화살표 키, preview drag, wheel zoom 을 구현했다.
+  - `requestAnimationFrame` 기반 루프와 `33 ms` send interval 로 최대 30 Hz pose 전송을 유지했다.
+  - `ready` 메시지의 `camera_pose` 를 form/controller state 에 반영하고, `ack` 는 status line 을 매번 갱신하지 않도록 처리했다.
+  - text entry target / `contenteditable` 포커스 중에는 키 입력을 무시하고, `blur` 시 pressed key state 를 초기화하도록 했다.
+  - `deltaMode` 정규화와 pitch clamp (`0.99`) 를 넣어 입력 장치 차이와 near-parallel rejection 을 완화했다.
+  - form field 와 payload textarea 가 현재 pose 를 같이 반영하도록 동기화했다.
+- `index.html`
+  - 별도 `Camera Control` 패널과 toggle button, move/rotate speed slider, key legend 를 추가했다.
+- `styles.css`
+  - active state 버튼, active preview outline, key legend / `kbd`, range slider 스타일을 추가했다.
+
+검증 결과:
+
+- `node --check src/projects/extended_gaussian/renderer/server/www/app.js` 통과
+- source `www` 를 `--www-root` 로 연결한 설치 서버에서 `/`, `/app.js`, `/styles.css` 서빙 확인
+- 응답 내용에서 `toggle-camera`, `move-speed`, `CameraController`, `.key-legend`, `#stream-preview.camera-active` 존재 확인
+- 사용자 수동 브라우저 검증으로 로컬 조작 결과 확인
+
+현재 범위 정리:
+
+- 이번 변경은 브라우저 입력 UX 전용이다. 서버 C++ / protocol / build graph / install layout 은 바꾸지 않았다.
+- 외부 호스트에서 접속하려면 기존 서버 실행 시 `--listen-host` 를 비-loopback 으로 지정해야 한다.
+
+- 상세 코드 비교: `docs/source_diff_details_7627561_to_53ed390/`

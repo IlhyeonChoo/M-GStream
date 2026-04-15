@@ -886,3 +886,46 @@ M7 merge gate 관점 정리:
 - 최종 상태는 `implementation ready, verification partial pass` 로 기록한다.
 
 상세 코드 비교: `docs/source_diff_details_d30707f_to_0d9f177/`
+
+
+## 2026-04-15 M8 browser camera control
+
+M8에서는 서버 C++ 경로를 건드리지 않고, 브라우저 reference client (`www/`) 위에 **실시간 키보드/마우스 카메라 제어 UX** 를 올렸다.
+
+수정 파일:
+
+- `src/projects/extended_gaussian/renderer/server/www/app.js`
+- `src/projects/extended_gaussian/renderer/server/www/index.html`
+- `src/projects/extended_gaussian/renderer/server/www/styles.css`
+
+적용한 변경:
+
+- `app.js`
+  - `CameraController` 를 추가하고 `WASD`, `Q/E`, 화살표 키, preview 드래그/휠 입력을 `set_camera_pose` WebSocket payload 로 변환하도록 구현했다.
+  - `requestAnimationFrame` 기반 tick 루프에서 최대 약 30 Hz (`33 ms`) 로 pose 를 전송하도록 throttle 했다.
+  - `ready.camera_pose` 수신 시 form/controller state 를 동기화하고, `ack` 는 status line 을 갱신하지 않도록 해서 연속 제어 시 UI가 과도하게 흔들리지 않게 했다.
+  - `input/textarea/select/contenteditable` 포커스 시 키 입력을 무시하고, `window.blur` 에서 pressed key state 를 초기화해 stuck key 를 방지했다.
+  - `wheel` 은 `deltaMode` 를 정규화해 마우스와 트랙패드 간 감도 차이를 줄였고, pitch 는 `|dot(forward, WORLD_UP)| < 0.99` 에서 clamp 했다.
+  - form input 과 payload textarea 가 현재 camera pose 와 같이 움직이도록 동기화 경로를 추가했다.
+- `index.html`
+  - `Camera Control` 패널, enable/disable 버튼, 이동/회전 속도 슬라이더, 키 범례를 추가했다.
+- `styles.css`
+  - active 버튼 상태, preview 활성 강조, key legend / `kbd`, range slider 스타일을 추가했다.
+
+검증 결과:
+
+- `node --check src/projects/extended_gaussian/renderer/server/www/app.js`: PASS
+- 설치 서버를 `--www-root src/projects/extended_gaussian/renderer/server/www` 로 실행한 뒤 `/`, `/app.js`, `/styles.css` 정적 자산 서빙 확인: PASS
+- source 자산 기준 smoke
+  - `/` 에 `toggle-camera`, `move-speed`, `rotate-speed` 존재
+  - `/app.js` 에 `CameraController`, `toggleCameraControl` 존재
+  - `/styles.css` 에 `button.active`, `.key-legend`, `#stream-preview.camera-active` 존재
+- 사용자 로컬 브라우저 수동 확인
+  - `Open Stream` / `Connect WebSocket` / `Enable Camera Control` 후 조작 결과 확인: PASS
+
+운영상 주의:
+
+- 브라우저 제어는 `/control` WebSocket contract 재사용만 수행하며, 인증/TLS는 여전히 서버 쪽 미구현이다.
+- 다른 컴퓨터에서 접속하려면 `--listen-host 127.0.0.1` 대신 Tailscale IP 또는 `0.0.0.0` 로 다시 실행해야 한다. 이 부분은 M8 변경 범위가 아니라 기존 서버 bind 정책 문제다.
+
+상세 코드 비교: `docs/source_diff_details_7627561_to_53ed390/`

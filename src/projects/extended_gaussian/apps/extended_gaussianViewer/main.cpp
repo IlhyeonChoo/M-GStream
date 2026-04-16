@@ -32,6 +32,19 @@ bool shutdownRequested()
     return g_shutdown_requested != 0;
 }
 
+#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+const char* loadContentSourceKindName(LoadContentSourceKind kind)
+{
+    switch (kind) {
+    case LoadContentSourceKind::ModelDirectory:
+        return "model_dir";
+    case LoadContentSourceKind::Manifest:
+        return "manifest";
+    }
+    return "unknown";
+}
+#endif
+
 struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
     Arg<std::string> manifest = { "manifest", "", "path to a manifest json file" };
     Arg<bool> headless = { "headless", "run without a visible window; without --server it renders a finite snapshot and exits" };
@@ -73,6 +86,15 @@ RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& 
     snapshot.current_phase = viewer.getCurrentPhase();
     snapshot.available_phases = viewer.getAvailablePhases();
     snapshot.total_asset_count = viewer.getManifestAssetCount();
+    if (const ResourceManager* resource_manager = viewer.getResourceManager()) {
+        snapshot.total_asset_count = std::max(snapshot.total_asset_count, resource_manager->listAssetIds().size());
+    }
+    snapshot.content_loaded = viewer.hasLoadedContent();
+    snapshot.loaded_source_kind = viewer.getLoadedContentKind();
+    snapshot.loaded_source_path = viewer.getLoadedContentPath();
+    snapshot.load_state = viewer.getLoadState();
+    snapshot.last_load_error = viewer.getLastLoadError();
+    snapshot.last_load_sequence = viewer.getLastLoadSequence();
 
     if (rendering_system != nullptr) {
         if (const SwapManager::Stats* swap = rendering_system->getSwapStats()) {
@@ -126,6 +148,14 @@ void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewe
     case ControlMessageType::SetPhase: {
         viewer.setCurrentPhase(message.phase);
         applied = true;
+        break;
+    }
+    case ControlMessageType::LoadContent: {
+        if (message.load_source_kind == LoadContentSourceKind::Manifest) {
+            applied = viewer.replaceWithManifestFile(message.path, apply_error, sequence);
+        } else {
+            applied = viewer.replaceWithModelDirectory(message.path, apply_error, sequence);
+        }
         break;
     }
     }
@@ -332,6 +362,10 @@ int main(int ac, char** av)
 
     const std::string dataset_path = getCommandLineArgs().get<std::string>("path", "");
     const std::string manifest_path = myArgs.manifest.get();
+    if (!manifest_path.empty() && viewer.getLoadState() == "error") {
+        SIBR_WRG << "Failed to load manifest: " << manifest_path << " (" << viewer.getLastLoadError() << ")" << std::endl;
+        return EXIT_FAILURE;
+    }
     if (server_enabled && manifest_path.empty() && !dataset_path.empty()) {
         if (!viewer.loadModelDirectoryAsInstance(dataset_path)) {
             SIBR_WRG << "Failed to load model directory for remote stream server: " << dataset_path << std::endl;

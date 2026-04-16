@@ -2,7 +2,23 @@ const state = {
   socket: null,
   cameraController: null,
   healthPollTimer: null,
+  loadWatchTimer: null,
   manifestInfo: null,
+  browse: {
+    currentPath: "",
+    parentPath: "",
+    entries: [],
+    selectedEntry: null,
+    pendingLoadSequence: 0,
+  },
+  rendererStatus: {
+    content_loaded: false,
+    loaded_source_kind: "",
+    loaded_source_path: "",
+    load_state: "idle",
+    last_load_error: "",
+    last_load_sequence: 0,
+  },
 };
 
 const MIN_VECTOR_NORM = 1e-6;
@@ -52,10 +68,47 @@ function currentWsUrl() {
   }
 }
 
+function configuredHttpOrigin() {
+  const value = $("http-origin").value.trim();
+  return value || currentHttpOrigin();
+}
+
 function setStatus(text, isError = false) {
   const statusLine = $("status-line");
   statusLine.textContent = text;
   statusLine.dataset.error = isError ? "true" : "false";
+}
+
+function setBrowseStatus(text, isError = false) {
+  const statusLine = $("browse-status");
+  statusLine.textContent = text;
+  statusLine.dataset.error = isError ? "true" : "false";
+}
+
+function setCameraControlButtonState(active) {
+  const button = $("toggle-camera");
+  button.textContent = active ? "Disable Camera Control" : "Enable Camera Control";
+  button.classList.toggle("active", active);
+}
+
+function setHealthPollButtonState(active) {
+  const button = $("toggle-health-poll");
+  button.textContent = active ? "Stop Health Poll" : "Start Health Poll";
+  button.classList.toggle("active", active);
+}
+
+function setLoadButtonState(disabled, label = "Load Selected") {
+  const button = $("load-selected");
+  button.disabled = disabled;
+  button.textContent = label;
+}
+
+function formatBytes(bytes) {
+  const numeric = Number(bytes);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return "--";
+  }
+  return `${(numeric / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function parseVectorInput(text) {
@@ -193,23 +246,6 @@ function syncPoseUi(pose) {
   syncPayloadTextareaFromPose(pose);
 }
 
-function setCameraControlButtonState(active) {
-  const button = $("toggle-camera");
-  button.textContent = active ? "Disable Camera Control" : "Enable Camera Control";
-  button.classList.toggle("active", active);
-}
-
-function setHealthPollButtonState(active) {
-  const button = $("toggle-health-poll");
-  button.textContent = active ? "Stop Health Poll" : "Start Health Poll";
-  button.classList.toggle("active", active);
-}
-
-function configuredHttpOrigin() {
-  const value = $("http-origin").value.trim();
-  return value || currentHttpOrigin();
-}
-
 function updateManifestPanel(info) {
   const panel = $("manifest-panel");
   const select = $("phase-select");
@@ -260,14 +296,6 @@ function updateManifestPanel(info) {
   totalAssets.value = Number.isFinite(Number(info.total_assets)) ? String(info.total_assets) : "--";
 }
 
-function formatBytes(bytes) {
-  const numeric = Number(bytes);
-  if (!Number.isFinite(numeric) || numeric < 0) {
-    return "--";
-  }
-  return `${(numeric / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function updateStreamingStats(renderer) {
   const streaming = renderer && renderer.streaming ? renderer.streaming : null;
   const values = {
@@ -287,6 +315,48 @@ function updateStreamingStats(renderer) {
   });
 }
 
+function updateLoadStatePanel(renderer) {
+  const status = renderer || {};
+  state.rendererStatus = {
+    content_loaded: Boolean(status.content_loaded),
+    loaded_source_kind: typeof status.loaded_source_kind === "string" ? status.loaded_source_kind : "",
+    loaded_source_path: typeof status.loaded_source_path === "string" ? status.loaded_source_path : "",
+    load_state: typeof status.load_state === "string" ? status.load_state : "idle",
+    last_load_error: typeof status.last_load_error === "string" ? status.last_load_error : "",
+    last_load_sequence: Number.isFinite(Number(status.last_load_sequence)) ? Number(status.last_load_sequence) : 0,
+  };
+
+  $("load-state").value = state.rendererStatus.load_state;
+  $("loaded-source-path").value = state.rendererStatus.loaded_source_path;
+  $("last-load-error").value = state.rendererStatus.last_load_error;
+}
+
+function applyRendererState(renderer) {
+  updateManifestPanel(renderer ? {
+    has_manifest: renderer.has_manifest,
+    current_phase: renderer.current_phase,
+    available_phases: renderer.available_phases,
+    total_assets: renderer.total_assets,
+  } : null);
+  updateStreamingStats(renderer);
+  updateLoadStatePanel(renderer);
+}
+
+function rendererStateFromReadyMessage(message) {
+  return {
+    has_manifest: message.has_manifest,
+    current_phase: message.current_phase,
+    available_phases: message.available_phases,
+    total_assets: message.total_assets,
+    content_loaded: message.content_loaded,
+    loaded_source_kind: message.loaded_source_kind,
+    loaded_source_path: message.loaded_source_path,
+    load_state: message.load_state,
+    last_load_error: message.last_load_error,
+    last_load_sequence: message.last_load_sequence,
+  };
+}
+
 async function pollHealthz() {
   const response = await fetch(new URL("/healthz", configuredHttpOrigin()).toString(), { cache: "no-store" });
   if (!response.ok) {
@@ -298,8 +368,8 @@ async function pollHealthz() {
     throw new Error("Health response did not include renderer state.");
   }
 
-  updateManifestPanel(payload.renderer);
-  updateStreamingStats(payload.renderer);
+  applyRendererState(payload.renderer);
+  return payload.renderer;
 }
 
 function clearHealthPoll() {
@@ -333,13 +403,227 @@ function toggleHealthPoll() {
     });
 }
 
-function applyPhase() {
+function clearLoadWatch() {
+  if (state.loadWatchTimer !== null) {
+    window.clearInterval(state.loadWatchTimer);
+    state.loadWatchTimer = null;
+  }
+  state.browse.pendingLoadSequence = 0;
+  updateLoadButtonAvailability();
+}
+
+function startLoadWatch(sequence) {
+  clearLoadWatch();
+  state.browse.pendingLoadSequence = sequence;
+  setLoadButtonState(true, `Loading (seq=${sequence})`);
+  state.loadWatchTimer = window.setInterval(async () => {
+    try {
+      const renderer = await pollHealthz();
+      const currentSequence = Number(renderer.last_load_sequence ?? 0);
+      if (currentSequence < sequence || renderer.load_state === "loading") {
+        return;
+      }
+      clearLoadWatch();
+      if (renderer.load_state === "loaded") {
+        setStatus(`Content loaded (seq=${sequence}).`);
+      } else {
+        setStatus(`Load failed (seq=${sequence}): ${renderer.last_load_error || "unknown error"}`, true);
+      }
+    } catch (error) {
+      clearLoadWatch();
+      setStatus(error.message, true);
+    }
+  }, 500);
+}
+
+function updateLoadButtonAvailability() {
+  const selected = state.browse.selectedEntry;
+  const hasPendingLoad = state.browse.pendingLoadSequence !== 0;
+  const canLoad = Boolean(selected && selected.loadable_as && selected.loadable_as !== "none");
+  if (hasPendingLoad) {
+    setLoadButtonState(true, `Loading (seq=${state.browse.pendingLoadSequence})`);
+    return;
+  }
+  setLoadButtonState(!canLoad, "Load Selected");
+}
+
+function setSelectedBrowseEntry(entry) {
+  state.browse.selectedEntry = entry || null;
+  $("browse-selected-path").value = entry ? entry.path : "";
+  $("browse-selected-kind").value = entry ? entry.kind : "";
+  $("browse-selected-loadable").value = entry ? entry.loadable_as : "";
+  updateLoadButtonAvailability();
+  renderBrowseEntries();
+}
+
+function createBadge(text, loadable = false) {
+  const badge = document.createElement("span");
+  badge.className = `browse-pill${loadable ? " loadable" : ""}`;
+  badge.textContent = text;
+  return badge;
+}
+
+function renderBrowseEntries() {
+  const list = $("browse-entry-list");
+  list.innerHTML = "";
+
+  if (!state.browse.entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "status small-text";
+    empty.textContent = "No entries found in this directory.";
+    list.appendChild(empty);
+    return;
+  }
+
+  state.browse.entries.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "browse-entry";
+    if (state.browse.selectedEntry && state.browse.selectedEntry.path === entry.path) {
+      row.classList.add("selected");
+    }
+
+    const main = document.createElement("div");
+    main.className = "browse-entry-main";
+
+    const name = document.createElement("p");
+    name.className = "browse-entry-name";
+    name.textContent = entry.name;
+    main.appendChild(name);
+
+    const path = document.createElement("p");
+    path.className = "browse-entry-path";
+    path.textContent = entry.path;
+    main.appendChild(path);
+
+    const badges = document.createElement("div");
+    badges.className = "browse-entry-badges";
+    badges.appendChild(createBadge(entry.kind));
+    if (entry.loadable_as && entry.loadable_as !== "none") {
+      badges.appendChild(createBadge(`load as ${entry.loadable_as}`, true));
+    }
+    main.appendChild(badges);
+
+    const actions = document.createElement("div");
+    actions.className = "browse-entry-actions";
+
+    if (entry.kind === "directory") {
+      const openButton = document.createElement("button");
+      openButton.type = "button";
+      openButton.textContent = "Open";
+      openButton.addEventListener("click", () => browsePath(entry.path, false));
+      actions.appendChild(openButton);
+    }
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.textContent = "Select";
+    selectButton.addEventListener("click", () => setSelectedBrowseEntry(entry));
+    actions.appendChild(selectButton);
+
+    if (entry.loadable_as && entry.loadable_as !== "none") {
+      const loadButton = document.createElement("button");
+      loadButton.type = "button";
+      loadButton.textContent = "Load";
+      loadButton.disabled = state.browse.pendingLoadSequence !== 0;
+      loadButton.addEventListener("click", () => {
+        setSelectedBrowseEntry(entry);
+        loadSelectedContent().catch((error) => setStatus(error.message, true));
+      });
+      actions.appendChild(loadButton);
+    }
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
+}
+
+async function browsePath(path = "", preserveSelection = true) {
+  const url = new URL("/api/fs/list", configuredHttpOrigin());
+  if (path) {
+    url.searchParams.set("path", path);
+  }
+
+  const previousSelectedPath = preserveSelection && state.browse.selectedEntry ? state.browse.selectedEntry.path : "";
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    let errorMessage = `Browse request failed: HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload.error) {
+        errorMessage = payload.error;
+      }
+    } catch (error) {
+      // Ignore non-JSON errors.
+    }
+    throw new Error(errorMessage);
+  }
+
+  const payload = await response.json();
+  if (!payload.ok || !Array.isArray(payload.entries)) {
+    throw new Error("Browse response did not contain directory entries.");
+  }
+
+  state.browse.currentPath = typeof payload.current_path === "string" ? payload.current_path : "";
+  state.browse.parentPath = typeof payload.parent_path === "string" ? payload.parent_path : state.browse.currentPath;
+  state.browse.entries = payload.entries.map((entry) => ({
+    name: String(entry.name || ""),
+    path: String(entry.path || ""),
+    kind: String(entry.kind || ""),
+    loadable_as: String(entry.loadable_as || "none"),
+  }));
+
+  $("browse-current-path").value = state.browse.currentPath;
+  $("browse-parent-path").value = state.browse.parentPath;
+
+  const selectionPath = previousSelectedPath || (state.browse.selectedEntry ? state.browse.selectedEntry.path : "");
+  const selectedEntry = selectionPath
+    ? state.browse.entries.find((entry) => entry.path === selectionPath) || null
+    : null;
+  state.browse.selectedEntry = selectedEntry;
+  if (!selectedEntry) {
+    $("browse-selected-path").value = "";
+    $("browse-selected-kind").value = "";
+    $("browse-selected-loadable").value = "";
+  }
+  updateLoadButtonAvailability();
+  renderBrowseEntries();
+  setBrowseStatus(`Loaded ${state.browse.entries.length} entries from ${state.browse.currentPath || "(root)"}.`);
+}
+
+async function browseRoot() {
+  await browsePath("", false);
+}
+
+async function browseUp() {
+  const nextPath = state.browse.parentPath || state.browse.currentPath;
+  await browsePath(nextPath, false);
+}
+
+function ensureSocketConnected() {
   if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
     throw new Error("WebSocket is not connected.");
   }
+}
 
+function loadSelectedContent() {
+  ensureSocketConnected();
+  const entry = state.browse.selectedEntry;
+  if (!entry || !entry.loadable_as || entry.loadable_as === "none") {
+    throw new Error("Select a loadable model directory or manifest first.");
+  }
+
+  state.socket.send(JSON.stringify({
+    type: "load_content",
+    source_kind: entry.loadable_as,
+    path: entry.path,
+  }));
+  setStatus(`Load request sent: ${entry.path}`);
+}
+
+function applyPhase() {
+  ensureSocketConnected();
   const phase = $("phase-custom").value.trim() || $("phase-select").value;
-
   state.socket.send(JSON.stringify({ type: "set_phase", phase }));
   if (state.manifestInfo) {
     updateManifestPanel({ ...state.manifestInfo, has_manifest: true, current_phase: phase });
@@ -626,9 +910,7 @@ class CameraController {
   }
 
   sendPose() {
-    if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
-      throw new Error("WebSocket is not connected.");
-    }
+    ensureSocketConnected();
     const payloadObject = payloadObjectFromPose(this.getPose());
     state.socket.send(JSON.stringify(payloadObject));
   }
@@ -741,6 +1023,7 @@ function connectSocket() {
       setCameraControlButtonState(false);
     }
     clearHealthPoll();
+    clearLoadWatch();
     if (state.socket === socket) {
       state.socket = null;
     }
@@ -760,12 +1043,10 @@ function connectSocket() {
             state.cameraController.initFromPose(message.camera_pose);
           }
         }
-        updateManifestPanel({
-          has_manifest: message.has_manifest,
-          current_phase: message.current_phase,
-          available_phases: message.available_phases,
-          total_assets: message.total_assets,
-        });
+        applyRendererState(rendererStateFromReadyMessage(message));
+        if (!state.browse.currentPath) {
+          browseRoot().catch((error) => setBrowseStatus(error.message, true));
+        }
         setStatus("WebSocket ready. Camera pose synchronized.");
         return;
       }
@@ -776,6 +1057,9 @@ function connectSocket() {
       if (message.type === "ack") {
         if (message.request_type === "set_phase") {
           setStatus(`Phase request queued (seq=${message.sequence}).`);
+        } else if (message.request_type === "load_content") {
+          startLoadWatch(Number(message.sequence));
+          setStatus(`Load request queued (seq=${message.sequence}).`);
         }
         return;
       }
@@ -791,18 +1075,13 @@ function sendPayload() {
   const payload = payloadText ? payloadText : JSON.stringify(buildPayloadObject(), null, 2);
   $("payload").value = payload;
 
-  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
-    throw new Error("WebSocket is not connected.");
-  }
-
+  ensureSocketConnected();
   state.socket.send(payload);
   setStatus("Control payload sent.");
 }
 
 function toggleCameraControl() {
-  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
-    throw new Error("WebSocket is not connected.");
-  }
+  ensureSocketConnected();
 
   if (!state.cameraController) {
     state.cameraController = new CameraController();
@@ -837,9 +1116,22 @@ function applyDefaults() {
   $("move-speed").value = String(DEFAULT_MOVE_SPEED);
   $("rotate-speed").value = String(DEFAULT_ROTATE_SPEED);
   clearHealthPoll();
+  clearLoadWatch();
   updateManifestPanel(null);
   updateStreamingStats(null);
+  updateLoadStatePanel(null);
   setCameraControlButtonState(false);
+  state.browse.currentPath = "";
+  state.browse.parentPath = "";
+  state.browse.entries = [];
+  state.browse.selectedEntry = null;
+  $("browse-current-path").value = "";
+  $("browse-parent-path").value = "";
+  $("browse-selected-path").value = "";
+  $("browse-selected-kind").value = "";
+  $("browse-selected-loadable").value = "";
+  renderBrowseEntries();
+  setBrowseStatus("Browse the server filesystem and choose a model directory or manifest.");
   syncPoseUi({
     position: [0, 0, 0],
     forward: [0, 0, -1],
@@ -847,6 +1139,7 @@ function applyDefaults() {
     fovy: DEFAULT_FOVY,
   });
   formatPayload();
+  browseRoot().catch((error) => setBrowseStatus(error.message, true));
 }
 
 function bindActions() {
@@ -868,6 +1161,22 @@ function bindActions() {
   $("disconnect-ws").addEventListener("click", () => {
     disconnectSocket();
     setStatus("WebSocket: disconnected");
+  });
+  $("browse-root").addEventListener("click", () => {
+    browseRoot().catch((error) => setBrowseStatus(error.message, true));
+  });
+  $("browse-up").addEventListener("click", () => {
+    browseUp().catch((error) => setBrowseStatus(error.message, true));
+  });
+  $("browse-refresh").addEventListener("click", () => {
+    browsePath(state.browse.currentPath || "", true).catch((error) => setBrowseStatus(error.message, true));
+  });
+  $("load-selected").addEventListener("click", () => {
+    try {
+      loadSelectedContent();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
   });
   $("format-payload").addEventListener("click", () => {
     try {

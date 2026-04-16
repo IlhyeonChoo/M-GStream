@@ -35,6 +35,20 @@ namespace {
 		return true;
 	}
 
+	bool parseLoadSourceKind(const std::string& value, sibr::LoadContentSourceKind& kind, std::string& error)
+	{
+		if (value == "model_dir") {
+			kind = sibr::LoadContentSourceKind::ModelDirectory;
+			return true;
+		}
+		if (value == "manifest") {
+			kind = sibr::LoadContentSourceKind::Manifest;
+			return true;
+		}
+		error = "Field 'source_kind' must be either 'model_dir' or 'manifest'.";
+		return false;
+	}
+
 	bool parseFloatField(
 		const picojson::object& object,
 		const std::string& key,
@@ -209,6 +223,22 @@ namespace sibr {
 		} else if (type == "set_phase") {
 			message.type = ControlMessageType::SetPhase;
 			if (!parseStringField(object, "phase", message.phase, result.error)) {
+				return result;
+			}
+		} else if (type == "load_content") {
+			message.type = ControlMessageType::LoadContent;
+			std::string source_kind;
+			if (!parseStringField(object, "source_kind", source_kind, result.error)) {
+				return result;
+			}
+			if (!parseLoadSourceKind(source_kind, message.load_source_kind, result.error)) {
+				return result;
+			}
+			if (!parseStringField(object, "path", message.path, result.error)) {
+				return result;
+			}
+			if (message.path.empty()) {
+				result.error = "Field 'path' must not be empty.";
 				return result;
 			}
 		} else {

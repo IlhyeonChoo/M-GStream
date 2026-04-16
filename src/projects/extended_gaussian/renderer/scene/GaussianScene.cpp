@@ -42,6 +42,11 @@ namespace sibr {
         return true;
     }
 
+    void GaussianScene::clearInstances()
+    {
+        instances.clear();
+    }
+
     size_t GaussianScene::countInstancesUsingAsset(const std::string& assetId) const
     {
         if (assetId.empty()) {

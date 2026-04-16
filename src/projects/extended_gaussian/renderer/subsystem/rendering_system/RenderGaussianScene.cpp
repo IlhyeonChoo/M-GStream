@@ -61,6 +61,11 @@ namespace sibr {
 		return true;
 	}
 
+	void RenderGaussianScene::clear()
+	{
+		instances.clear();
+	}
+
 	const std::unordered_map<const GaussianInstance*, RenderGaussianInstance::UPtr>& RenderGaussianScene::getInstances() const {
 		return instances;
 	}

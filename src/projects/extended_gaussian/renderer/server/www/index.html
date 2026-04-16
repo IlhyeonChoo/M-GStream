@@ -12,11 +12,11 @@
       <p class="eyebrow">Reference Client</p>
       <h1>Extended Gaussian Remote Stream</h1>
       <p class="intro">
-        This page is a protocol reference for the future Ubuntu remote browser stream mode.
-        It assumes the server exposes <code>/stream.mjpg</code> and <code>/control</code>.
+        This page is a protocol reference for the Ubuntu remote browser stream mode.
+        It assumes the server exposes <code>/stream.mjpg</code>, <code>/control</code>, and <code>/api/fs/list</code>.
       </p>
       <p class="hint">
-        The payload formatter applies the same baseline validation as the current C++ parser:
+        Camera payload validation matches the current C++ parser:
         <code>0 &lt; fovy &lt; pi</code>, non-zero vectors, and no parallel or near-parallel
         <code>forward</code>/<code>up</code> pair.
       </p>
@@ -42,6 +42,56 @@
       </div>
       <p id="status-line" class="status">WebSocket: disconnected</p>
       <img id="stream-preview" alt="MJPEG stream preview">
+    </section>
+
+    <section class="panel">
+      <h2>Content Browser</h2>
+      <div class="grid two-col">
+        <label>
+          <span>Current Path</span>
+          <input id="browse-current-path" type="text" value="" readonly>
+        </label>
+        <label>
+          <span>Parent Path</span>
+          <input id="browse-parent-path" type="text" value="" readonly>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="browse-root" type="button">Browse Root</button>
+        <button id="browse-up" type="button">Up</button>
+        <button id="browse-refresh" type="button">Refresh</button>
+        <button id="load-selected" type="button">Load Selected</button>
+      </div>
+      <p id="browse-status" class="status">Browse the server filesystem and choose a model directory or manifest.</p>
+      <div id="browse-entry-list" class="browse-list"></div>
+      <div class="grid three-col">
+        <label>
+          <span>Selected Path</span>
+          <input id="browse-selected-path" type="text" value="" readonly>
+        </label>
+        <label>
+          <span>Selected Kind</span>
+          <input id="browse-selected-kind" type="text" value="" readonly>
+        </label>
+        <label>
+          <span>Load As</span>
+          <input id="browse-selected-loadable" type="text" value="" readonly>
+        </label>
+      </div>
+      <div class="grid two-col compact-top">
+        <label>
+          <span>Load State</span>
+          <input id="load-state" type="text" value="idle" readonly>
+        </label>
+        <label>
+          <span>Loaded Source</span>
+          <input id="loaded-source-path" type="text" value="" readonly>
+        </label>
+      </div>
+      <label class="block compact-top">
+        <span>Last Load Error</span>
+        <textarea id="last-load-error" rows="3" readonly></textarea>
+      </label>
     </section>
 
     <section class="panel">

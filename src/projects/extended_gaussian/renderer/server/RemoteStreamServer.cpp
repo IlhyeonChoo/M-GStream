@@ -3,6 +3,7 @@
 #include <core/system/Utils.hpp>
 
 #include "MjpegStreamer.hpp"
+#include <projects/extended_gaussian/renderer/resource/GaussianLoader.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -39,6 +40,29 @@ constexpr const char* kVersionName = "m7-integration-verification";
 constexpr const char* kMjpegBoundary = "ExGaussBoundary";
 constexpr auto kAcceptSleep = std::chrono::milliseconds(25);
 constexpr auto kStreamWait = std::chrono::milliseconds(250);
+
+const char* controlQueueModeName()
+{
+    return "camera_latest_only+management_fifo";
+}
+
+const char* loadSourceKindName(sibr::LoadContentSourceKind kind)
+{
+    switch (kind) {
+    case sibr::LoadContentSourceKind::ModelDirectory:
+        return "model_dir";
+    case sibr::LoadContentSourceKind::Manifest:
+        return "manifest";
+    }
+    return "unknown";
+}
+
+struct BrowseEntry {
+    std::string name;
+    std::string path;
+    std::string kind;
+    std::string loadable_as;
+};
 
 struct StreamClientSession {
     explicit StreamClientSession(tcp::socket&& accepted_socket)
@@ -219,6 +243,198 @@ std::string readFileBytes(const fs::path& path, std::string& error)
     return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
+fs::path defaultBrowseRoot()
+{
+#ifdef _WIN32
+    const fs::path root = fs::current_path().root_path();
+    return root.empty() ? fs::current_path() : root;
+#else
+    return fs::path("/");
+#endif
+}
+
+std::string queryParameterValue(const std::string& target, const std::string& key, std::string& error)
+{
+    const size_t query_pos = target.find('?');
+    if (query_pos == std::string::npos || query_pos + 1 >= target.size()) {
+        return {};
+    }
+
+    std::string query = target.substr(query_pos + 1);
+    const size_t fragment_pos = query.find('#');
+    if (fragment_pos != std::string::npos) {
+        query = query.substr(0, fragment_pos);
+    }
+
+    std::stringstream stream(query);
+    std::string pair;
+    while (std::getline(stream, pair, '&')) {
+        if (pair.empty()) {
+            continue;
+        }
+
+        const size_t equals_pos = pair.find('=');
+        const std::string encoded_key = equals_pos == std::string::npos ? pair : pair.substr(0, equals_pos);
+        std::string decoded_key = percentDecode(encoded_key, error);
+        if (!error.empty()) {
+            return {};
+        }
+        if (decoded_key != key) {
+            continue;
+        }
+
+        const std::string encoded_value = equals_pos == std::string::npos ? std::string() : pair.substr(equals_pos + 1);
+        std::string decoded_value = percentDecode(encoded_value, error);
+        if (!error.empty()) {
+            return {};
+        }
+        return decoded_value;
+    }
+
+    return {};
+}
+
+bool resolveBrowsePath(const std::string& raw_path, fs::path& canonical_path, std::string& error)
+{
+    fs::path requested = raw_path.empty() ? defaultBrowseRoot() : fs::path(raw_path);
+    if (!requested.is_absolute()) {
+        error = "Browse path must be absolute.";
+        return false;
+    }
+
+    std::error_code fs_error;
+    if (!fs::exists(requested, fs_error)) {
+        error = "Browse path does not exist: " + requested.string();
+        return false;
+    }
+    if (!fs::is_directory(requested, fs_error)) {
+        error = "Browse path is not a directory: " + requested.string();
+        return false;
+    }
+
+    canonical_path = fs::canonical(requested, fs_error);
+    if (fs_error) {
+        error = "Failed to resolve browse path '" + requested.string() + "': " + fs_error.message();
+        return false;
+    }
+
+    return true;
+}
+
+std::string browseEntryJson(const BrowseEntry& entry)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"name\":\"" << jsonEscape(entry.name) << "\","
+        << "\"path\":\"" << jsonEscape(entry.path) << "\","
+        << "\"kind\":\"" << jsonEscape(entry.kind) << "\","
+        << "\"loadable_as\":\"" << jsonEscape(entry.loadable_as) << "\""
+        << "}";
+    return stream.str();
+}
+
+bool isPotentialModelDirectory(const fs::path& directory_path)
+{
+    std::error_code error;
+    if (!fs::is_directory(directory_path, error) || error) {
+        return false;
+    }
+
+    const bool has_cfg_args = fs::exists(directory_path / "cfg_args", error);
+    if (error || !has_cfg_args) {
+        return false;
+    }
+
+    error.clear();
+    if (fs::exists(directory_path / "point_cloud", error) && !error) {
+        return true;
+    }
+
+    error.clear();
+    return fs::exists(directory_path / "point_cloud_blocks", error) && !error;
+}
+
+std::string filesystemListJson(const fs::path& current_path, const fs::path& parent_path, const std::vector<BrowseEntry>& entries)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"ok\":true,"
+        << "\"current_path\":\"" << jsonEscape(current_path.string()) << "\","
+        << "\"parent_path\":\"" << jsonEscape(parent_path.string()) << "\","
+        << "\"entries\":[";
+    for (size_t index = 0; index < entries.size(); ++index) {
+        if (index > 0) {
+            stream << ",";
+        }
+        stream << browseEntryJson(entries[index]);
+    }
+    stream << "]}";
+    return stream.str();
+}
+
+std::vector<BrowseEntry> listBrowseEntries(const fs::path& current_path)
+{
+    std::vector<BrowseEntry> entries;
+    std::error_code iterator_error;
+    for (const auto& entry : fs::directory_iterator(current_path, iterator_error)) {
+        if (iterator_error) {
+            break;
+        }
+
+        const fs::path entry_path = entry.path();
+        const std::string name = entry_path.filename().string();
+        if (name.empty()) {
+            continue;
+        }
+
+        std::error_code status_error;
+        if (fs::is_directory(entry_path, status_error)) {
+            std::string loadable_as = "none";
+            if (isPotentialModelDirectory(entry_path)) {
+                try {
+                    const sibr::GaussianModelDirectoryProbe probe = sibr::GaussianLoader::probeModelDirectory(boost::filesystem::path(entry_path.string()));
+                    if (probe.ok) {
+                        loadable_as = "model_dir";
+                    }
+                } catch (const std::exception&) {
+                    loadable_as = "none";
+                }
+            }
+            entries.push_back(BrowseEntry{
+                name,
+                entry_path.string(),
+                "directory",
+                loadable_as
+            });
+            continue;
+        }
+
+        if (!fs::is_regular_file(entry_path, status_error)) {
+            continue;
+        }
+        if (toLower(entry_path.extension().string()) != ".json") {
+            continue;
+        }
+
+        entries.push_back(BrowseEntry{
+            name,
+            entry_path.string(),
+            "manifest_file",
+            "manifest"
+        });
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const BrowseEntry& lhs, const BrowseEntry& rhs) {
+        if (lhs.kind != rhs.kind) {
+            return lhs.kind == "directory";
+        }
+        return lhs.name < rhs.name;
+    });
+    return entries;
+}
+
 template <typename Body>
 void applyCommonHeaders(http::response<Body>& response)
 {
@@ -327,7 +543,7 @@ std::string healthJson(
         << "  },\n"
         << "  \"control\": {\n"
         << "    \"websocket_path\": \"/control\",\n"
-        << "    \"queue_mode\": \"latest_only\",\n"
+        << "    \"queue_mode\": \"" << controlQueueModeName() << "\",\n"
         << "    \"active_clients\": " << stats.active_control_clients << ",\n"
         << "    \"messages_received\": " << stats.control_messages_received << ",\n"
         << "    \"messages_queued\": " << stats.control_messages_queued << ",\n"
@@ -361,6 +577,12 @@ std::string healthJson(
     }
     stream << "]";
     stream << ",\n    \"total_assets\": " << renderer.total_asset_count;
+    stream << ",\n    \"content_loaded\": " << (renderer.content_loaded ? "true" : "false");
+    stream << ",\n    \"loaded_source_kind\": \"" << jsonEscape(renderer.loaded_source_kind) << "\"";
+    stream << ",\n    \"loaded_source_path\": \"" << jsonEscape(renderer.loaded_source_path) << "\"";
+    stream << ",\n    \"load_state\": \"" << jsonEscape(renderer.load_state) << "\"";
+    stream << ",\n    \"last_load_error\": \"" << jsonEscape(renderer.last_load_error) << "\"";
+    stream << ",\n    \"last_load_sequence\": " << renderer.last_load_sequence;
     stream << ",\n    \"streaming\": {"
            << "\"required_gpu\":" << renderer.required_gpu_count
            << ",\"warm_cpu\":" << renderer.warm_cpu_count
@@ -390,7 +612,7 @@ std::string controlReadyJson(const sibr::RendererHealthSnapshot& renderer)
         << "\"type\":\"ready\","
         << "\"service\":\"" << kServiceName << "\","
         << "\"version\":\"" << kVersionName << "\","
-        << "\"queue_mode\":\"latest_only\","
+        << "\"queue_mode\":\"" << controlQueueModeName() << "\","
         << "\"control_path\":\"/control\","
         << "\"camera_pose_available\":" << (renderer.has_camera_pose ? "true" : "false");
     if (renderer.has_camera_pose) {
@@ -411,6 +633,12 @@ std::string controlReadyJson(const sibr::RendererHealthSnapshot& renderer)
     stream
         << "]"
         << ",\"total_assets\":" << renderer.total_asset_count
+        << ",\"content_loaded\":" << (renderer.content_loaded ? "true" : "false")
+        << ",\"loaded_source_kind\":\"" << jsonEscape(renderer.loaded_source_kind) << "\""
+        << ",\"loaded_source_path\":\"" << jsonEscape(renderer.loaded_source_path) << "\""
+        << ",\"load_state\":\"" << jsonEscape(renderer.load_state) << "\""
+        << ",\"last_load_error\":\"" << jsonEscape(renderer.last_load_error) << "\""
+        << ",\"last_load_sequence\":" << renderer.last_load_sequence
         << "}";
     return stream.str();
 }
@@ -425,7 +653,7 @@ std::string controlAckJson(uint64_t sequence, bool superseded_previous, const ch
         << "\"type\":\"ack\","
         << "\"request_type\":\"" << request_type << "\","
         << "\"status\":\"queued\","
-        << "\"queue_mode\":\"latest_only\","
+        << "\"queue_mode\":\"" << controlQueueModeName() << "\","
         << "\"sequence\":" << sequence << ","
         << "\"superseded_previous\":" << (superseded_previous ? "true" : "false") << ","
         << "\"server_ack_unix_ms\":" << server_ack_unix_ms
@@ -445,6 +673,16 @@ std::string controlErrorJson(const std::string& error)
     return stream.str();
 }
 
+std::string apiErrorJson(const std::string& error)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"ok\":false,"
+        << "\"error\":\"" << jsonEscape(error) << "\""
+        << "}";
+    return stream.str();
+}
 std::string mjpegStreamHeader()
 {
     std::ostringstream stream;
@@ -581,7 +819,8 @@ bool RemoteStreamServer::start(std::string& error)
     start_time_ = std::chrono::steady_clock::now();
     {
         std::lock_guard<std::mutex> lock(control_message_mutex_);
-        pending_control_message_.reset();
+        pending_camera_control_message_.reset();
+        pending_management_control_messages_.clear();
         next_control_sequence_ = 1;
     }
 
@@ -629,7 +868,8 @@ bool RemoteStreamServer::start(std::string& error)
         }
         {
             std::lock_guard<std::mutex> lock(control_message_mutex_);
-            pending_control_message_.reset();
+            pending_camera_control_message_.reset();
+            pending_management_control_messages_.clear();
         }
         if (impl_) {
             impl_->acceptor.reset();
@@ -741,7 +981,8 @@ void RemoteStreamServer::stop()
 
     {
         std::lock_guard<std::mutex> lock(control_message_mutex_);
-        pending_control_message_.reset();
+        pending_camera_control_message_.reset();
+        pending_management_control_messages_.clear();
     }
     {
         std::lock_guard<std::mutex> lock(control_latency_mutex_);
@@ -795,19 +1036,28 @@ bool RemoteStreamServer::consumePendingControlMessage(
     std::chrono::steady_clock::time_point& received_at)
 {
     bool has_message = false;
+    bool has_more_messages = false;
     {
         std::lock_guard<std::mutex> lock(control_message_mutex_);
-        if (pending_control_message_) {
-            sequence = pending_control_message_->sequence;
-            received_at = pending_control_message_->received_time;
-            message = pending_control_message_->message;
-            pending_control_message_.reset();
+        if (!pending_management_control_messages_.empty()) {
+            const PendingControlMessage pending = pending_management_control_messages_.front();
+            pending_management_control_messages_.pop_front();
+            sequence = pending.sequence;
+            received_at = pending.received_time;
+            message = pending.message;
+            has_message = true;
+        } else if (pending_camera_control_message_) {
+            sequence = pending_camera_control_message_->sequence;
+            received_at = pending_camera_control_message_->received_time;
+            message = pending_camera_control_message_->message;
+            pending_camera_control_message_.reset();
             has_message = true;
         }
+        has_more_messages = pending_camera_control_message_.has_value() || !pending_management_control_messages_.empty();
     }
     if (has_message) {
         std::lock_guard<std::mutex> lock(stats_mutex_);
-        stats_.control_message_pending = false;
+        stats_.control_message_pending = has_more_messages;
     }
     return has_message;
 }
@@ -865,7 +1115,7 @@ void RemoteStreamServer::recordControlMessageApplied(uint64_t sequence, bool app
     stats_.control_receive_to_apply_ms = latency_summary;
 }
 
-bool RemoteStreamServer::enqueueLatestControlMessage(
+bool RemoteStreamServer::enqueueControlMessage(
     const ControlMessage& message,
     uint64_t& sequence,
     bool& superseded_previous,
@@ -878,13 +1128,19 @@ bool RemoteStreamServer::enqueueLatestControlMessage(
 
     {
         std::lock_guard<std::mutex> lock(control_message_mutex_);
-        superseded_previous = pending_control_message_.has_value();
         PendingControlMessage pending;
         pending.sequence = next_control_sequence_++;
         pending.received_time = std::chrono::steady_clock::now();
         pending.message = message;
         sequence = pending.sequence;
-        pending_control_message_ = pending;
+
+        if (message.type == ControlMessageType::SetCameraPose) {
+            superseded_previous = pending_camera_control_message_.has_value();
+            pending_camera_control_message_ = pending;
+        } else {
+            superseded_previous = false;
+            pending_management_control_messages_.push_back(pending);
+        }
     }
 
     {
@@ -1079,7 +1335,8 @@ void RemoteStreamServer::serverThreadMain()
                 continue;
             }
 
-            const std::string target = stripQueryAndFragment(std::string(request.target()));
+            const std::string raw_target = std::string(request.target());
+            const std::string target = stripQueryAndFragment(raw_target);
             if (target == "/healthz") {
                 const auto now = std::chrono::steady_clock::now();
                 const double uptime_sec = std::chrono::duration<double>(now - start_time_).count();
@@ -1087,6 +1344,44 @@ void RemoteStreamServer::serverThreadMain()
                     http::status::ok,
                     "application/json; charset=utf-8",
                     healthJson(stats(), rendererHealthSnapshot(), uptime_sec));
+                closeSocket(socket);
+                continue;
+            }
+
+            if (target == "/api/fs/list") {
+                std::string query_error;
+                const std::string requested_path = queryParameterValue(raw_target, "path", query_error);
+                if (!query_error.empty()) {
+                    write_string_response(
+                        http::status::bad_request,
+                        "application/json; charset=utf-8",
+                        apiErrorJson(query_error));
+                    closeSocket(socket);
+                    continue;
+                }
+
+                fs::path current_path;
+                std::string resolve_error;
+                if (!resolveBrowsePath(requested_path, current_path, resolve_error)) {
+                    write_string_response(
+                        http::status::bad_request,
+                        "application/json; charset=utf-8",
+                        apiErrorJson(resolve_error));
+                    closeSocket(socket);
+                    continue;
+                }
+
+                std::error_code parent_error;
+                fs::path parent_path = current_path.parent_path();
+                if (parent_path.empty() || !fs::exists(parent_path, parent_error)) {
+                    parent_path = current_path;
+                }
+
+                const std::vector<BrowseEntry> entries = listBrowseEntries(current_path);
+                write_string_response(
+                    http::status::ok,
+                    "application/json; charset=utf-8",
+                    filesystemListJson(current_path, parent_path, entries));
                 closeSocket(socket);
                 continue;
             }
@@ -1287,7 +1582,7 @@ void RemoteStreamServer::serverThreadMain()
                             uint64_t sequence = 0;
                             bool superseded_previous = false;
                             std::string enqueue_error;
-                            if (!enqueueLatestControlMessage(parsed.message, sequence, superseded_previous, enqueue_error)) {
+                            if (!enqueueControlMessage(parsed.message, sequence, superseded_previous, enqueue_error)) {
                                 {
                                     std::lock_guard<std::mutex> lock(stats_mutex_);
                                     ++stats_.control_messages_rejected;
@@ -1299,8 +1594,12 @@ void RemoteStreamServer::serverThreadMain()
                                 continue;
                             }
 
-                            const char* request_type =
-                                parsed.message.type == ControlMessageType::SetPhase ? "set_phase" : "set_camera_pose";
+                            const char* request_type = "set_camera_pose";
+                            if (parsed.message.type == ControlMessageType::SetPhase) {
+                                request_type = "set_phase";
+                            } else if (parsed.message.type == ControlMessageType::LoadContent) {
+                                request_type = "load_content";
+                            }
                             response_payload = controlAckJson(sequence, superseded_previous, request_type);
                             if (!writeWebSocketText(ws, response_payload, ws_error)) {
                                 break;

@@ -24,6 +24,7 @@ namespace sibr {
 		const RenderGaussianInstance* getInstance(const GaussianInstance* origin) const;
 
 		bool removeInstance(const GaussianInstance* origin);
+		void clear();
 
 		const std::unordered_map<const GaussianInstance*, RenderGaussianInstance::UPtr>& getInstances() const;
 

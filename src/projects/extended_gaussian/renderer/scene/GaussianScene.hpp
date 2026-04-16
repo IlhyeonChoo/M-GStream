@@ -23,6 +23,7 @@ namespace sibr {
 		const GaussianInstance* getInstance(const std::string& name) const;
 
 		bool removeInstance(const std::string& name);
+		void clearInstances();
 		size_t countInstancesUsingAsset(const std::string& assetId) const;
 
 		const std::unordered_map<std::string, GaussianInstance::UPtr>& getInstances() const;

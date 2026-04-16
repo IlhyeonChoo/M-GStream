@@ -5,59 +5,61 @@
 
 namespace fs = boost::filesystem;
 
-std::string findLargestNumberedSubdirectory(const std::string& directoryPath) {
-	fs::path dirPath(directoryPath);
-	if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
-		std::cerr << "Invalid directory: " << directoryPath << std::endl;
-		return "";
+namespace {
+
+std::string findLargestNumberedSubdirectory(const fs::path& directory_path)
+{
+	if (!fs::exists(directory_path) || !fs::is_directory(directory_path)) {
+		return {};
 	}
 
-	std::regex regexPattern(R"_(iteration_(\d+))_");
-	std::string largestSubdirectory;
-	int largestNumber = -1;
+	std::regex regex_pattern(R"_(iteration_(\d+))_");
+	std::string largest_subdirectory;
+	int largest_number = -1;
 
-	for (const auto& entry : fs::directory_iterator(dirPath)) {
-		if (fs::is_directory(entry)) {
-			std::string subdirectory = entry.path().filename().string();
-			std::smatch match;
+	for (const auto& entry : fs::directory_iterator(directory_path)) {
+		if (!fs::is_directory(entry)) {
+			continue;
+		}
 
-			if (std::regex_match(subdirectory, match, regexPattern)) {
-				int number = std::stoi(match[1]);
+		const std::string subdirectory = entry.path().filename().string();
+		std::smatch match;
+		if (!std::regex_match(subdirectory, match, regex_pattern)) {
+			continue;
+		}
 
-				if (number > largestNumber) {
-					largestNumber = number;
-					largestSubdirectory = subdirectory;
-				}
-			}
+		const int number = std::stoi(match[1]);
+		if (number > largest_number) {
+			largest_number = number;
+			largest_subdirectory = subdirectory;
 		}
 	}
 
-	return largestSubdirectory;
+	return largest_subdirectory;
 }
 
-std::string findPointCloudRoot(const std::string& modelPath)
+fs::path findPointCloudRoot(const fs::path& model_path)
 {
-	const fs::path root(modelPath);
-	const fs::path standardRoot = root / "point_cloud";
-	if (fs::exists(standardRoot) && fs::is_directory(standardRoot)) {
-		return standardRoot.string();
+	const fs::path standard_root = model_path / "point_cloud";
+	if (fs::exists(standard_root) && fs::is_directory(standard_root)) {
+		return standard_root;
 	}
 
-	const fs::path blockRoot = root / "point_cloud_blocks";
-	if (fs::exists(blockRoot) && fs::is_directory(blockRoot)) {
-		const fs::path preferredScale = blockRoot / "scale_1.0";
-		if (fs::exists(preferredScale) && fs::is_directory(preferredScale)) {
-			return preferredScale.string();
+	const fs::path block_root = model_path / "point_cloud_blocks";
+	if (fs::exists(block_root) && fs::is_directory(block_root)) {
+		const fs::path preferred_scale = block_root / "scale_1.0";
+		if (fs::exists(preferred_scale) && fs::is_directory(preferred_scale)) {
+			return preferred_scale;
 		}
 
-		for (const auto& entry : fs::directory_iterator(blockRoot)) {
+		for (const auto& entry : fs::directory_iterator(block_root)) {
 			if (fs::is_directory(entry)) {
-				return entry.path().string();
+				return entry.path();
 			}
 		}
 	}
 
-	return "";
+	return {};
 }
 
 std::pair<int, int> findArg(const std::string& line, const std::string& name)
@@ -69,30 +71,88 @@ std::pair<int, int> findArg(const std::string& line, const std::string& name)
 	return std::make_pair(start, end);
 }
 
+} // namespace
+
 namespace sibr {
+	GaussianModelDirectoryProbe GaussianLoader::probeModelDirectory(const fs::path& model_path)
+	{
+		GaussianModelDirectoryProbe probe;
+		try {
+			if (model_path.empty()) {
+				probe.error = "Model directory path is empty.";
+				return probe;
+			}
+
+			fs::path resolved_model_path = model_path;
+			if (!fs::exists(resolved_model_path)) {
+				probe.error = "Model directory does not exist: " + model_path.string();
+				return probe;
+			}
+			if (!fs::is_directory(resolved_model_path)) {
+				probe.error = "Model path is not a directory: " + model_path.string();
+				return probe;
+			}
+
+			resolved_model_path = fs::canonical(resolved_model_path);
+
+			const fs::path cfg_args_path = resolved_model_path / "cfg_args";
+			if (!fs::exists(cfg_args_path) || !fs::is_regular_file(cfg_args_path)) {
+				probe.error = "Could not find config file 'cfg_args' at " + resolved_model_path.string();
+				return probe;
+			}
+
+			const fs::path point_cloud_root = findPointCloudRoot(resolved_model_path);
+			if (point_cloud_root.empty()) {
+				probe.error = "Could not find point cloud directory at " + resolved_model_path.string()
+					+ " (expected 'point_cloud' or 'point_cloud_blocks/scale_*').";
+				return probe;
+			}
+
+			const std::string latest_folder = findLargestNumberedSubdirectory(point_cloud_root);
+			if (latest_folder.empty()) {
+				probe.error = "Could not find iteration folder in " + point_cloud_root.string();
+				return probe;
+			}
+
+			const fs::path latest_iteration_dir = point_cloud_root / latest_folder;
+			const fs::path point_cloud_ply = latest_iteration_dir / "point_cloud.ply";
+			if (!fs::exists(point_cloud_ply) || !fs::is_regular_file(point_cloud_ply)) {
+				probe.error = "Could not find model's PLY file at " + point_cloud_ply.string();
+				return probe;
+			}
+
+			probe.ok = true;
+			probe.canonical_model_dir = resolved_model_path;
+			probe.point_cloud_root = point_cloud_root;
+			probe.latest_iteration_dir = latest_iteration_dir;
+			probe.point_cloud_ply = point_cloud_ply;
+			return probe;
+		} catch (const fs::filesystem_error& error) {
+			probe.error = "Failed to inspect model directory '" + model_path.string() + "': " + error.what();
+			return probe;
+		}
+	}
+
 	GaussianField::UPtr GaussianLoader::load(const std::string& modelPath) {
 		auto field = std::make_unique<GaussianField>();
 		field->path = modelPath;
 
-		fs::path p(modelPath);
-
-		std::string folderName = p.filename().string();
-		if (folderName.empty()) {
-			folderName = p.parent_path().filename().string();
+		const GaussianModelDirectoryProbe probe = probeModelDirectory(fs::path(modelPath));
+		if (!probe.ok) {
+			SIBR_ERR << probe.error;
+			return nullptr;
 		}
 
+		field->path = probe.canonical_model_dir.string();
+		std::string folderName = probe.canonical_model_dir.filename().string();
+		if (folderName.empty()) {
+			folderName = probe.canonical_model_dir.parent_path().filename().string();
+		}
 		field->name = folderName;
 
-		// 1. ��� ó��
-		std::string pathWithSlash = modelPath;
-		if (pathWithSlash.back() != '/' && pathWithSlash.back() != '\\') {
-			pathWithSlash += "/";
-		}
-
-		// 2. cfg_args �Ľ�
-		std::ifstream cfgFile(pathWithSlash + "cfg_args");
+		std::ifstream cfgFile((probe.canonical_model_dir / "cfg_args").string());
 		if (!cfgFile.good()) {
-			SIBR_ERR << "Could not find config file 'cfg_args' at " << modelPath;
+			SIBR_ERR << "Could not find config file 'cfg_args' at " << probe.canonical_model_dir.string();
 			return nullptr;
 		}
 
@@ -100,25 +160,10 @@ namespace sibr {
 		std::getline(cfgFile, cfgLine);
 		auto shRng = findArg(cfgLine, "sh_degree");
 		int runtime_sh_degree = std::stoi(cfgLine.substr(shRng.first, shRng.second - shRng.first));
-		field->sh_degree = runtime_sh_degree; // field�� ����
+		field->sh_degree = runtime_sh_degree;
 
-		// 3. �ֽ� iteration ���� ã��
-		std::string plyRoot = findPointCloudRoot(modelPath);
-		if (plyRoot.empty()) {
-			SIBR_ERR << "Could not find point cloud directory at " << modelPath
-				<< " (expected 'point_cloud' or 'point_cloud_blocks/scale_*').";
-			return nullptr;
-		}
-		std::string latestFolder = findLargestNumberedSubdirectory(plyRoot);
-		if (latestFolder.empty()) {
-			SIBR_ERR << "Could not find iteration folder in " << plyRoot;
-			return nullptr;
-		}
+		const std::string finalPlyPath = probe.point_cloud_ply.string();
 
-		// 4. ���� PLY ��� �ϼ�
-		std::string finalPlyPath = plyRoot + "/" + latestFolder + "/point_cloud.ply";
-
-		// 5. [�ٽ� ����] ��Ÿ�� ������ ������ Ÿ�� ����� ����
 		bool success = false;
 		switch (runtime_sh_degree) {
 		case 0: success = loadPly<0>(finalPlyPath.c_str(), *field); break;
@@ -135,4 +180,3 @@ namespace sibr {
 		return field;
 	}	
 }
-

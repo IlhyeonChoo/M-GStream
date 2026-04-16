@@ -105,6 +105,13 @@ namespace sibr {
 		return itr->second.cpu_field;
 	}
 
+	void ResourceManager::clear()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		records_.clear();
+		totalCpuBytes_ = 0;
+	}
+
 	bool ResourceManager::removeField(const std::string& name)
 	{
 		return unregisterAsset(name);

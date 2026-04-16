@@ -202,6 +202,13 @@ namespace sibr {
 		return &swapManager->stats();
 	}
 
+	void RenderingSystem::clearSceneInstances()
+	{
+		if (scene) {
+			scene->clear();
+		}
+	}
+
 	RenderingSystem::~RenderingSystem()
 	{
 	}

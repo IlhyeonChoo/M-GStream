@@ -48,6 +48,7 @@ namespace sibr {
 		bool removeField(const std::string& assetId);
 		bool requestEvict(const AssetId& assetId);
 		void evictNow(const AssetId& assetId);
+		void clear();
 		size_t totalBytes() const;
 		size_t gpuBytes(const AssetId& assetId) const;
 		std::vector<GpuAssetStatus> snapshot() const;

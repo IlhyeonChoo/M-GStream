@@ -47,6 +47,7 @@ namespace sibr
 		void tickStreaming(const ViewerContext& context);
 		bool hasManifest() const;
 		const SwapManager::Stats* getSwapStats() const;
+		void clearSceneInstances();
 
 		~RenderingSystem();
 

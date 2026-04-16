@@ -135,6 +135,13 @@ namespace sibr {
         itr->second.state = GpuState::Unloaded;
     }
 
+    void GPUResourceManager::clear()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        gpu_fields.clear();
+        totalBytes_ = 0;
+    }
+
     size_t GPUResourceManager::totalBytes() const
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -172,13 +179,7 @@ namespace sibr {
 
     int GPUResourceManager::CleanUp()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        totalBytes_ = 0;
-        for (auto& gpuPair : gpu_fields) {
-            gpuPair.second.actual_gpu_bytes = 0;
-            gpuPair.second.field.reset();
-            gpuPair.second.state = GpuState::Unloaded;
-        }
+        clear();
         return 0;
     }
 

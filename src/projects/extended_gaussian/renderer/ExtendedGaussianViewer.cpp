@@ -45,7 +45,8 @@ namespace sibr {
 
 		const std::string manifestPath = getCommandLineArgs().get<std::string>("manifest", "");
 		if (!manifestPath.empty()) {
-			loadManifestFile(manifestPath);
+			std::string manifestError;
+			loadManifestFile(manifestPath, manifestError);
 		}
 	}
 
@@ -320,20 +321,27 @@ namespace sibr {
 
 		auto field = GaussianLoader::load(modelPath);
 		if (!field) {
+			_lastLoadError = "Failed to load model directory: " + modelPath;
+			_loadState = contentLoadStateLabel(ContentLoadState::Error);
 			return false;
 		}
 
 		const std::string assetId = field->name;
 		if (assetId.empty()) {
+			_lastLoadError = "Loaded model directory does not have a valid asset id: " + modelPath;
+			_loadState = contentLoadStateLabel(ContentLoadState::Error);
 			return false;
 		}
 
+		const std::string resolvedPath = field->path;
 		Vector3f minBounds = field->min_edges;
 		Vector3f maxBounds = field->max_edges;
 		const bool addedField = _resourceManager->addField(std::move(field));
 		if (!addedField) {
 			const auto existingField = _resourceManager->getCpuFieldShared(assetId);
 			if (!existingField) {
+				_lastLoadError = "Failed to register loaded asset: " + assetId;
+				_loadState = contentLoadStateLabel(ContentLoadState::Error);
 				return false;
 			}
 			minBounds = existingField->min_edges;
@@ -344,6 +352,10 @@ namespace sibr {
 			if (instancePair.second && instancePair.second->getAssetId() == assetId) {
 				_selectedField = assetId;
 				_selectedInstance = instancePair.second.get();
+				_loadedContentKind = "model_dir";
+				_loadedContentPath = resolvedPath;
+				_loadState = contentLoadStateLabel(ContentLoadState::Loaded);
+				_lastLoadError.clear();
 				focusCameraOnBounds(minBounds, maxBounds);
 				return true;
 			}
@@ -357,6 +369,8 @@ namespace sibr {
 
 		GaussianInstance* instance = _scene->createInstance(instanceName, assetId);
 		if (!instance) {
+			_lastLoadError = "Failed to create scene instance for asset: " + assetId;
+			_loadState = contentLoadStateLabel(ContentLoadState::Error);
 			return false;
 		}
 
@@ -366,7 +380,44 @@ namespace sibr {
 			renderingSystem->onInstanceCreated(*instance);
 		}
 
+		_loadedContentKind = "model_dir";
+		_loadedContentPath = resolvedPath;
+		_loadState = contentLoadStateLabel(ContentLoadState::Loaded);
+		_lastLoadError.clear();
 		focusCameraOnBounds(minBounds, maxBounds);
+		return true;
+	}
+
+	bool ExtendedGaussianViewer::replaceWithModelDirectory(const std::string& modelPath, std::string& error, uint64_t loadSequence)
+	{
+		beginContentLoad("model_dir", modelPath, loadSequence);
+		if (!resetCurrentContent(error)) {
+			finishContentLoad("model_dir", modelPath, loadSequence, false, error);
+			return false;
+		}
+		if (!loadModelDirectoryAsInstance(modelPath)) {
+			error = _lastLoadError.empty() ? ("Failed to load model directory: " + modelPath) : _lastLoadError;
+			finishContentLoad("model_dir", _loadedContentPath.empty() ? modelPath : _loadedContentPath, loadSequence, false, error);
+			return false;
+		}
+		finishContentLoad("model_dir", _loadedContentPath.empty() ? modelPath : _loadedContentPath, loadSequence, true, std::string());
+		error.clear();
+		return true;
+	}
+
+	bool ExtendedGaussianViewer::replaceWithManifestFile(const std::string& path, std::string& error, uint64_t loadSequence)
+	{
+		beginContentLoad("manifest", path, loadSequence);
+		if (!resetCurrentContent(error)) {
+			finishContentLoad("manifest", path, loadSequence, false, error);
+			return false;
+		}
+		if (!loadManifestFile(path, error)) {
+			finishContentLoad("manifest", _loadedContentPath.empty() ? path : _loadedContentPath, loadSequence, false, error);
+			return false;
+		}
+		finishContentLoad("manifest", _loadedManifestPath.empty() ? path : _loadedManifestPath, loadSequence, true, std::string());
+		error.clear();
 		return true;
 	}
 
@@ -488,9 +539,116 @@ namespace sibr {
 		return _manifestStore.assets().size();
 	}
 
-	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path)
+	bool ExtendedGaussianViewer::hasLoadedContent() const
+	{
+		return _loadState == contentLoadStateLabel(ContentLoadState::Loaded) && !_loadedContentPath.empty();
+	}
+
+	const std::string& ExtendedGaussianViewer::getLoadedContentKind() const
+	{
+		return _loadedContentKind;
+	}
+
+	const std::string& ExtendedGaussianViewer::getLoadedContentPath() const
+	{
+		return _loadedContentPath;
+	}
+
+	const std::string& ExtendedGaussianViewer::getLoadState() const
+	{
+		return _loadState;
+	}
+
+	const std::string& ExtendedGaussianViewer::getLastLoadError() const
+	{
+		return _lastLoadError;
+	}
+
+	uint64_t ExtendedGaussianViewer::getLastLoadSequence() const
+	{
+		return _lastLoadSequence;
+	}
+
+	bool ExtendedGaussianViewer::resetCurrentContent(std::string& error)
+	{
+		error.clear();
+		if (auto* renderingSystem = getRenderingSystem()) {
+			renderingSystem->setManifest(nullptr);
+		}
+
+		std::vector<std::pair<std::string, GaussianInstance*>> instances;
+		if (_scene) {
+			instances.reserve(_scene->getInstances().size());
+			for (const auto& instancePair : _scene->getInstances()) {
+				if (instancePair.second) {
+					instances.emplace_back(instancePair.first, instancePair.second.get());
+				}
+			}
+		}
+
+		if (auto* renderingSystem = getRenderingSystem()) {
+			for (const auto& instancePair : instances) {
+				renderingSystem->onInstanceRemoved(*instancePair.second);
+			}
+		}
+		if (_scene) {
+			for (const auto& instancePair : instances) {
+				_scene->removeInstance(instancePair.first);
+			}
+		}
+
+		GPUResourceManager::getInstance().clear();
+		if (_resourceManager) {
+			_resourceManager->clear();
+		}
+		_manifestStore.clear();
+		_loadedManifestPath.clear();
+		_currentPhase.clear();
+		_selectedInstance = nullptr;
+		_selectedField.clear();
+		return true;
+	}
+
+	void ExtendedGaussianViewer::beginContentLoad(const std::string& kind, const std::string& path, uint64_t loadSequence)
+	{
+		_loadedContentKind = kind;
+		_loadedContentPath = path;
+		_loadState = contentLoadStateLabel(ContentLoadState::Loading);
+		_lastLoadError.clear();
+		_lastLoadSequence = loadSequence;
+	}
+
+	void ExtendedGaussianViewer::finishContentLoad(
+		const std::string& kind,
+		const std::string& path,
+		uint64_t loadSequence,
+		bool success,
+		const std::string& error)
+	{
+		_loadedContentKind = kind;
+		_loadedContentPath = path;
+		_loadState = contentLoadStateLabel(success ? ContentLoadState::Loaded : ContentLoadState::Error);
+		_lastLoadError = success ? std::string() : error;
+		_lastLoadSequence = loadSequence;
+	}
+
+	const char* ExtendedGaussianViewer::contentLoadStateLabel(ContentLoadState state)
+	{
+		switch (state) {
+		case ContentLoadState::Idle: return "idle";
+		case ContentLoadState::Loading: return "loading";
+		case ContentLoadState::Loaded: return "loaded";
+		case ContentLoadState::Error: return "error";
+		}
+		return "unknown";
+	}
+
+	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path, std::string& error)
 	{
 		if (!_manifestStore.load(path)) {
+			error = "Failed to load manifest: " + path;
+			_lastLoadError = error;
+			_loadState = contentLoadStateLabel(ContentLoadState::Error);
 			return false;
 		}
 
@@ -512,7 +670,12 @@ namespace sibr {
 			}
 		}
 
+		_loadedContentKind = "manifest";
+		_loadedContentPath = _loadedManifestPath;
+		_loadState = contentLoadStateLabel(ContentLoadState::Loaded);
+		_lastLoadError.clear();
 		focusCameraOnManifest();
+		error.clear();
 		return true;
 	}
 
@@ -854,7 +1017,8 @@ namespace sibr {
 			if (ImGui::Button("Load Manifest", ImVec2(120, 30))) {
 				std::string manifestPath;
 				if (showFilePicker(manifestPath, FilePickerMode::Default, "", "json")) {
-					loadManifestFile(manifestPath);
+					std::string manifestError;
+					loadManifestFile(manifestPath, manifestError);
 				}
 			}
 			ImGui::SameLine();

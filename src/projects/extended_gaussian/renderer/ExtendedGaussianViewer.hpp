@@ -56,6 +56,8 @@ namespace sibr {
 		RenderingSystem* getRenderingSystem();
 		const RenderingSystem* getRenderingSystem() const;
 		bool loadModelDirectoryAsInstance(const std::string& modelPath);
+		bool replaceWithModelDirectory(const std::string& modelPath, std::string& error, uint64_t loadSequence = 0);
+		bool replaceWithManifestFile(const std::string& path, std::string& error, uint64_t loadSequence = 0);
 		bool captureGaussianViewSnapshot(const std::string& snapshotPath);
 		bool tryGetGaussianViewCamera(sibr::InputCamera& camera, std::string& error) const;
 		bool applyGaussianViewCamera(const sibr::InputCamera& camera, std::string& error);
@@ -67,9 +69,26 @@ namespace sibr {
 		void setCurrentPhase(const std::string& phase);
 		std::vector<std::string> getAvailablePhases() const;
 		size_t getManifestAssetCount() const;
+		bool hasLoadedContent() const;
+		const std::string& getLoadedContentKind() const;
+		const std::string& getLoadedContentPath() const;
+		const std::string& getLoadState() const;
+		const std::string& getLastLoadError() const;
+		uint64_t getLastLoadSequence() const;
 
 	private:
-		bool loadManifestFile(const std::string& path);
+		enum class ContentLoadState {
+			Idle,
+			Loading,
+			Loaded,
+			Error
+		};
+
+		bool loadManifestFile(const std::string& path, std::string& error);
+		bool resetCurrentContent(std::string& error);
+		void beginContentLoad(const std::string& kind, const std::string& path, uint64_t loadSequence);
+		void finishContentLoad(const std::string& kind, const std::string& path, uint64_t loadSequence, bool success, const std::string& error);
+		static const char* contentLoadStateLabel(ContentLoadState state);
 		size_t createManifestInstances(bool onlyMissing = true);
 		void focusCameraOnManifest();
 		void focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds);
@@ -98,6 +117,11 @@ namespace sibr {
 		ManifestStore _manifestStore;
 		std::string _loadedManifestPath;
 		std::string _currentPhase;
+		std::string _loadedContentKind;
+		std::string _loadedContentPath;
+		std::string _loadState = contentLoadStateLabel(ContentLoadState::Idle);
+		std::string _lastLoadError;
+		uint64_t _lastLoadSequence = 0;
 		double _appTimeSec = 0.0;
 		uint64_t _frameIndex = 0;
 	};

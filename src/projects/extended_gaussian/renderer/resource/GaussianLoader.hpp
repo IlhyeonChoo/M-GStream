@@ -10,6 +10,15 @@
 #include <fstream>
 
 namespace sibr {
+	struct GaussianModelDirectoryProbe {
+		bool ok = false;
+		boost::filesystem::path canonical_model_dir;
+		boost::filesystem::path point_cloud_root;
+		boost::filesystem::path latest_iteration_dir;
+		boost::filesystem::path point_cloud_ply;
+		std::string error;
+	};
+
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianLoader {
 	public:
 		SIBR_CLASS_PTR(GaussianLoader);
@@ -17,6 +26,7 @@ namespace sibr {
 		static GaussianField::UPtr load(const std::string& modelPath);
 		static GaussianField::Ptr loadShared(const std::string& modelPath);
 		static GaussianField::Ptr loadFromModelDir(const boost::filesystem::path& modelPath);
+		static GaussianModelDirectoryProbe probeModelDirectory(const boost::filesystem::path& modelPath);
 
 	private:
 		template<int D>

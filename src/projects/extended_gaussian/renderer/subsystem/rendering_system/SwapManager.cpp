@@ -42,6 +42,7 @@ namespace sibr {
 		manifest_ = manifest;
 		evictableSince_.clear();
 		worker_.stop();
+		stats_ = Stats();
 
 		if (manifest_ && !manifest_->empty()) {
 			worker_.start(manifest_->settings().max_concurrent_disk_loads);

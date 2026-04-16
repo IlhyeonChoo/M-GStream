@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <chrono>
+#include <deque>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -37,6 +38,12 @@ struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RendererHealthSnapshot {
     std::string current_phase;
     std::vector<std::string> available_phases;
     size_t total_asset_count = 0;
+    bool content_loaded = false;
+    std::string loaded_source_kind;
+    std::string loaded_source_path;
+    std::string load_state = "idle";
+    std::string last_load_error;
+    uint64_t last_load_sequence = 0;
     size_t required_gpu_count = 0;
     size_t warm_cpu_count = 0;
     size_t pending_disk_loads = 0;
@@ -114,7 +121,7 @@ private:
 
     void serverThreadMain();
     std::string resolveWwwRoot(std::string& error) const;
-    bool enqueueLatestControlMessage(const ControlMessage& message, uint64_t& sequence, bool& superseded_previous, std::string& error);
+    bool enqueueControlMessage(const ControlMessage& message, uint64_t& sequence, bool& superseded_previous, std::string& error);
     void pushControlLatencySample(double value_ms);
     TimingStatsSummary summarizeControlLatencySamples() const;
 
@@ -132,7 +139,8 @@ private:
     ServerStats stats_;
 
     mutable std::mutex control_message_mutex_;
-    std::optional<PendingControlMessage> pending_control_message_;
+    std::optional<PendingControlMessage> pending_camera_control_message_;
+    std::deque<PendingControlMessage> pending_management_control_messages_;
     uint64_t next_control_sequence_ = 1;
 
     mutable std::mutex control_latency_mutex_;

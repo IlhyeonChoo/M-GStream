@@ -15,6 +15,13 @@ namespace sibr {
 	using AssetId = std::string;
 	using PhaseId = std::string;
 
+	struct ManifestProbeResult {
+		bool ok = false;
+		boost::filesystem::path canonical_manifest_path;
+		size_t asset_count = 0;
+		std::string error;
+	};
+
 	enum class ManifestRuleType {
 		Phase,
 		CameraBounds,
@@ -63,6 +70,7 @@ namespace sibr {
 
 	class SIBR_EXTENDED_GAUSSIAN_EXPORT ManifestStore {
 	public:
+		static ManifestProbeResult probe(const boost::filesystem::path& manifestPath);
 		bool load(const boost::filesystem::path& manifestPath);
 		void clear();
 
@@ -75,6 +83,8 @@ namespace sibr {
 		std::vector<PhaseId> phases() const;
 
 	private:
+		bool loadInternal(const boost::filesystem::path& manifestPath, std::string& error, bool emitWarnings);
+
 		boost::filesystem::path manifestPath_;
 		ManifestGlobalSettings settings_;
 		std::unordered_map<AssetId, AssetDescriptor> assets_;

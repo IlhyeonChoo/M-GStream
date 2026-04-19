@@ -118,14 +118,43 @@ namespace {
 }
 
 namespace sibr {
+	ManifestProbeResult ManifestStore::probe(const boost::filesystem::path& manifestPath)
+	{
+		ManifestStore probeStore;
+		ManifestProbeResult result;
+		std::string error;
+		if (!probeStore.loadInternal(manifestPath, error, false)) {
+			result.error = error;
+			return result;
+		}
+
+		result.ok = true;
+		result.canonical_manifest_path = probeStore.path();
+		result.asset_count = probeStore.assets().size();
+		return result;
+	}
+
 	bool ManifestStore::load(const boost::filesystem::path& manifestPath)
+	{
+		std::string error;
+		if (!loadInternal(manifestPath, error, true)) {
+			return false;
+		}
+
+		SIBR_LOG << "Loaded manifest '" << manifestPath_.string() << "' with " << assets_.size()
+			<< " asset(s) and " << rules_.size() << " rule(s)." << std::endl;
+		return true;
+	}
+
+	bool ManifestStore::loadInternal(const boost::filesystem::path& manifestPath, std::string& error, bool emitWarnings)
 	{
 		clear();
 
 		picojson::value rootValue;
-		std::string error;
 		if (!loadJson(manifestPath, rootValue, error)) {
-			SIBR_WRG << error << std::endl;
+			if (emitWarnings) {
+				SIBR_WRG << error << std::endl;
+			}
 			return false;
 		}
 
@@ -146,7 +175,10 @@ namespace sibr {
 
 		const auto assetsIt = root.find("assets");
 		if (assetsIt == root.end() || !assetsIt->second.is<picojson::object>()) {
-			SIBR_WRG << "Manifest must contain an object field named 'assets'." << std::endl;
+			error = "Manifest must contain an object field named 'assets'.";
+			if (emitWarnings) {
+				SIBR_WRG << error << std::endl;
+			}
 			return false;
 		}
 
@@ -162,23 +194,29 @@ namespace sibr {
 			descriptor.id = assetPair.first;
 			descriptor.model_dir = boost::filesystem::path(parseString(assetObject, "model_dir"));
 			if (descriptor.model_dir.empty()) {
-				SIBR_WRG << "Manifest asset '" << descriptor.id << "' is missing 'model_dir'." << std::endl;
+				if (emitWarnings) {
+					SIBR_WRG << "Manifest asset '" << descriptor.id << "' is missing 'model_dir'." << std::endl;
+				}
 				continue;
 			}
 			if (descriptor.model_dir.is_relative()) {
 				descriptor.model_dir = manifestDirectory / descriptor.model_dir;
 			}
 			if (!boost::filesystem::exists(descriptor.model_dir)) {
-				SIBR_WRG << "Manifest asset '" << descriptor.id << "' points to a missing model directory: "
-					<< descriptor.model_dir.string() << std::endl;
+				if (emitWarnings) {
+					SIBR_WRG << "Manifest asset '" << descriptor.id << "' points to a missing model directory: "
+						<< descriptor.model_dir.string() << std::endl;
+				}
 				continue;
 			}
 			try {
 				descriptor.model_dir = boost::filesystem::canonical(descriptor.model_dir);
 			}
-			catch (const boost::filesystem::filesystem_error& error) {
-				SIBR_WRG << "Manifest asset '" << descriptor.id << "' failed to resolve model directory '"
-					<< descriptor.model_dir.string() << "': " << error.what() << std::endl;
+			catch (const boost::filesystem::filesystem_error& exception) {
+				if (emitWarnings) {
+					SIBR_WRG << "Manifest asset '" << descriptor.id << "' failed to resolve model directory '"
+						<< descriptor.model_dir.string() << "': " << exception.what() << std::endl;
+				}
 				continue;
 			}
 			descriptor.tags = parseStringArray(assetObject, "tags");
@@ -244,8 +282,7 @@ namespace sibr {
 		}
 
 		manifestPath_ = boost::filesystem::absolute(manifestPath);
-		SIBR_LOG << "Loaded manifest '" << manifestPath_.string() << "' with " << assets_.size()
-			<< " asset(s) and " << rules_.size() << " rule(s)." << std::endl;
+		error.clear();
 		return true;
 	}
 

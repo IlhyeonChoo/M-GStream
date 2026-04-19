@@ -12,6 +12,13 @@ const state = {
     selectedEntry: null,
     pendingLoadSequence: 0,
   },
+  search: {
+    active: false,
+    query: "",
+    results: [],
+    rootPath: "",
+    truncated: false,
+  },
   rendererStatus: {
     content_loaded: false,
     loaded_source_kind: "",
@@ -517,19 +524,59 @@ function createBadge(text, loadable = false, kind = "") {
   return badge;
 }
 
+function clearBrowseSelectionFields() {
+  $("browse-selected-path").value = "";
+  $("browse-selected-kind").value = "";
+  $("browse-selected-loadable").value = "";
+}
+
+function visibleBrowseEntries() {
+  return state.search.active ? state.search.results : state.browse.entries;
+}
+
+function resetSearchState(resetInput = false) {
+  state.search.active = false;
+  state.search.query = "";
+  state.search.results = [];
+  state.search.rootPath = "";
+  state.search.truncated = false;
+  if (resetInput) {
+    $("browse-search").value = "";
+  }
+}
+
+function browseStatusMessage() {
+  const currentPath = state.browse.currentPath || "/";
+  return `Loaded ${state.browse.entries.length} entries from ${currentPath}.`;
+}
+
+function searchStatusMessage() {
+  const rootPath = state.search.rootPath || state.browse.currentPath || "/";
+  const count = state.search.results.length;
+  const noun = count === 1 ? "result" : "results";
+  let message = `Loaded ${count} search ${noun} for "${state.search.query}" under ${rootPath}.`;
+  if (state.search.truncated) {
+    message += " Showing the first 100 matches.";
+  }
+  return message;
+}
+
 function renderBrowseEntries() {
   const list = $("browse-entry-list");
+  const entries = visibleBrowseEntries();
   list.innerHTML = "";
 
-  if (!state.browse.entries.length) {
+  if (!entries.length) {
     const empty = document.createElement("p");
     empty.className = "file-panel__footer-status";
-    empty.textContent = "No entries found in this directory.";
+    empty.textContent = state.search.active
+      ? "No loadable scenes or manifests matched this query."
+      : "No entries found in this directory.";
     list.appendChild(empty);
     return;
   }
 
-  state.browse.entries.forEach((entry) => {
+  entries.forEach((entry) => {
     const row = document.createElement("div");
     row.className = "file-panel__entry";
     if (state.browse.selectedEntry && state.browse.selectedEntry.path === entry.path) {
@@ -545,6 +592,7 @@ function renderBrowseEntries() {
     row.appendChild(icon);
 
     const main = document.createElement("div");
+    main.className = "file-panel__entry-main";
 
     const name = document.createElement("div");
     name.className = "file-panel__entry-name";
@@ -565,14 +613,19 @@ function renderBrowseEntries() {
     main.appendChild(badges);
 
     const actions = document.createElement("div");
-    actions.className = "file-panel__header-actions";
+    actions.className = "file-panel__entry-actions";
 
     if (entry.kind === "directory") {
       const openButton = document.createElement("button");
       openButton.type = "button";
       openButton.className = "file-panel__header-btn";
       openButton.textContent = "Open";
-      openButton.addEventListener("click", () => browsePath(entry.path, false));
+      openButton.addEventListener("click", () => {
+        if (state.search.active) {
+          resetSearchState(true);
+        }
+        browsePath(entry.path, false).catch((error) => setBrowseStatus(error.message, true));
+      });
       actions.appendChild(openButton);
     }
 
@@ -590,8 +643,12 @@ function renderBrowseEntries() {
       loadButton.textContent = "Load";
       loadButton.disabled = state.browse.pendingLoadSequence !== 0;
       loadButton.addEventListener("click", () => {
-        setSelectedBrowseEntry(entry);
-        loadSelectedContent().catch((error) => setStatus(error.message, true));
+        try {
+          setSelectedBrowseEntry(entry);
+          loadSelectedContent();
+        } catch (error) {
+          setStatus(error.message, true);
+        }
       });
       actions.appendChild(loadButton);
     }
@@ -647,29 +704,105 @@ async function browsePath(path = "", preserveSelection = true) {
     : null;
   state.browse.selectedEntry = selectedEntry;
   if (!selectedEntry) {
-    $("browse-selected-path").value = "";
-    $("browse-selected-kind").value = "";
-    $("browse-selected-loadable").value = "";
+    clearBrowseSelectionFields();
   }
   updateLoadButtonAvailability();
   renderBrowseEntries();
-  setBrowseStatus(`Loaded ${state.browse.entries.length} entries from ${state.browse.currentPath || "(root)"}.`);
+  setBrowseStatus(browseStatusMessage());
+}
+
+async function browseSearch(query, path = state.browse.currentPath || "", preserveSelection = true) {
+  const trimmedQuery = String(query || "").trim();
+  $("browse-search").value = trimmedQuery;
+
+  if (!trimmedQuery) {
+    resetSearchState(true);
+    if (!state.browse.currentPath) {
+      await browseInitialPath();
+      return;
+    }
+    renderBrowseEntries();
+    updateLoadButtonAvailability();
+    setBrowseStatus(browseStatusMessage());
+    return;
+  }
+
+  const url = new URL("/api/fs/search", configuredHttpOrigin());
+  url.searchParams.set("q", trimmedQuery);
+  if (path) {
+    url.searchParams.set("path", path);
+  }
+
+  const previousSelectedPath = preserveSelection && state.browse.selectedEntry ? state.browse.selectedEntry.path : "";
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) {
+    let errorMessage = `Search request failed: HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload.error) {
+        errorMessage = payload.error;
+      }
+    } catch (error) {
+      // Ignore non-JSON errors.
+    }
+    throw new Error(errorMessage);
+  }
+
+  const payload = await response.json();
+  if (!payload.ok || !Array.isArray(payload.entries)) {
+    throw new Error("Search response did not contain entries.");
+  }
+
+  state.search.active = true;
+  state.search.query = trimmedQuery;
+  state.search.rootPath = typeof payload.current_path === "string" ? payload.current_path : state.browse.currentPath;
+  state.search.results = payload.entries.map((entry) => ({
+    name: String(entry.name || ""),
+    path: String(entry.path || ""),
+    kind: String(entry.kind || ""),
+    loadable_as: String(entry.loadable_as || "none"),
+  }));
+  state.search.truncated = Boolean(payload.truncated);
+
+  const selectionPath = previousSelectedPath || (state.browse.selectedEntry ? state.browse.selectedEntry.path : "");
+  const selectedEntry = selectionPath
+    ? state.search.results.find((entry) => entry.path === selectionPath) || null
+    : null;
+  state.browse.selectedEntry = selectedEntry;
+  if (!selectedEntry) {
+    clearBrowseSelectionFields();
+  }
+  updateLoadButtonAvailability();
+  renderBrowseEntries();
+  setBrowseStatus(searchStatusMessage());
 }
 
 async function browseRoot() {
+  resetSearchState(true);
   await browsePath("__ROOT__", false);
 }
 
 async function browseInitialPath() {
+  resetSearchState(true);
   await browsePath("", false);
 }
 
 async function browseUp() {
+  resetSearchState(true);
   const nextPath = state.browse.parentPath || state.browse.currentPath;
   await browsePath(nextPath, false);
 }
 
+async function refreshBrowsePanel() {
+  if (state.search.active) {
+    await browseSearch(state.search.query, state.search.rootPath || state.browse.currentPath || "", true);
+    return;
+  }
+  await browsePath(state.browse.currentPath || "", true);
+}
+
 function ensureSocketConnected() {
+
   if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
     throw new Error("WebSocket is not connected.");
   }
@@ -1217,12 +1350,11 @@ function applyDefaults() {
   state.browse.parentPath = "";
   state.browse.entries = [];
   state.browse.selectedEntry = null;
+  resetSearchState(true);
   $("browse-current-path").value = "";
   $("browse-parent-path").value = "";
   $("browse-current-path-display").textContent = "/";
-  $("browse-selected-path").value = "";
-  $("browse-selected-kind").value = "";
-  $("browse-selected-loadable").value = "";
+  clearBrowseSelectionFields();
   $("left-sidebar").classList.add("sidebar--open");
   $("sidebar-left-tab").hidden = true;
   $("right-sidebar").classList.remove("sidebar--open");
@@ -1234,7 +1366,7 @@ function applyDefaults() {
   $("toggle-file-panel").setAttribute("aria-expanded", "false");
   $("stream-preview").src = "";
   renderBrowseEntries();
-  setBrowseStatus("Browse the server filesystem and choose a model directory or manifest.");
+  setBrowseStatus("Browse the server filesystem and search for a loadable model directory or manifest.");
   syncPoseUi({
     position: [0, 0, 0],
     forward: [0, 0, -1],
@@ -1273,6 +1405,25 @@ function bindActions() {
     disconnectSocket();
     setStatus("WebSocket: disconnected");
   });
+
+  const submitBrowseSearch = () => {
+    browseSearch($("browse-search").value, state.browse.currentPath || "", true).catch((error) => setBrowseStatus(error.message, true));
+  };
+
+  $("browse-search-submit").addEventListener("click", submitBrowseSearch);
+  $("browse-search-clear").addEventListener("click", () => {
+    resetSearchState(true);
+    renderBrowseEntries();
+    updateLoadButtonAvailability();
+    setBrowseStatus(browseStatusMessage());
+  });
+  $("browse-search").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      submitBrowseSearch();
+    }
+  });
+
   $("browse-root").addEventListener("click", () => {
     browseRoot().catch((error) => setBrowseStatus(error.message, true));
   });
@@ -1280,7 +1431,7 @@ function bindActions() {
     browseUp().catch((error) => setBrowseStatus(error.message, true));
   });
   $("browse-refresh").addEventListener("click", () => {
-    browsePath(state.browse.currentPath || "", true).catch((error) => setBrowseStatus(error.message, true));
+    refreshBrowsePanel().catch((error) => setBrowseStatus(error.message, true));
   });
   $("load-selected").addEventListener("click", () => {
     try {

@@ -4,6 +4,7 @@
 
 #include "MjpegStreamer.hpp"
 #include <projects/extended_gaussian/renderer/resource/GaussianLoader.hpp>
+#include <projects/extended_gaussian/renderer/resource/ManifestStore.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -40,6 +41,7 @@ constexpr const char* kVersionName = "m7-integration-verification";
 constexpr const char* kMjpegBoundary = "ExGaussBoundary";
 constexpr auto kAcceptSleep = std::chrono::milliseconds(25);
 constexpr auto kStreamWait = std::chrono::milliseconds(250);
+constexpr size_t kSearchResultLimit = 100;
 
 const char* controlQueueModeName()
 {
@@ -470,6 +472,152 @@ std::vector<BrowseEntry> listBrowseEntries(const fs::path& current_path)
             return lhs.kind == "directory";
         }
         return lhs.name < rhs.name;
+    });
+    return entries;
+}
+
+bool nameMatchesQuery(const std::string& name, const std::string& query_lower)
+{
+    return !query_lower.empty() && toLower(name).find(query_lower) != std::string::npos;
+}
+
+std::string filesystemSearchJson(const fs::path& current_path, const std::string& query, bool truncated, const std::vector<BrowseEntry>& entries)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"ok\":true,"
+        << "\"current_path\":\"" << jsonEscape(current_path.string()) << "\","
+        << "\"query\":\"" << jsonEscape(query) << "\","
+        << "\"truncated\":" << (truncated ? "true" : "false") << ","
+        << "\"entries\":[";
+    for (size_t index = 0; index < entries.size(); ++index) {
+        if (index > 0) {
+            stream << ",";
+        }
+        stream << browseEntryJson(entries[index]);
+    }
+    stream << "]}";
+    return stream.str();
+}
+
+std::vector<BrowseEntry> searchBrowseEntries(const fs::path& current_path, const std::string& query, bool& truncated)
+{
+    std::vector<BrowseEntry> entries;
+    truncated = false;
+
+    const std::string query_lower = toLower(query);
+    if (query_lower.empty()) {
+        return entries;
+    }
+
+    std::error_code iterator_error;
+    fs::recursive_directory_iterator it(
+        current_path,
+        fs::directory_options::skip_permission_denied,
+        iterator_error);
+    const fs::recursive_directory_iterator end;
+    if (iterator_error) {
+        return entries;
+    }
+
+    auto push_entry = [&](BrowseEntry entry) {
+        entries.push_back(std::move(entry));
+        if (entries.size() >= kSearchResultLimit) {
+            truncated = true;
+            return true;
+        }
+        return false;
+    };
+
+    while (it != end) {
+        if (iterator_error) {
+            iterator_error.clear();
+            it.increment(iterator_error);
+            continue;
+        }
+
+        const fs::path entry_path = it->path();
+        const std::string name = entry_path.filename().string();
+        if (name.empty()) {
+            it.increment(iterator_error);
+            continue;
+        }
+
+        std::error_code status_error;
+        const bool is_directory = fs::is_directory(entry_path, status_error);
+        if (status_error) {
+            status_error.clear();
+            it.increment(iterator_error);
+            continue;
+        }
+
+        if (is_directory) {
+            const bool potential_model_dir = isPotentialModelDirectory(entry_path);
+            if (potential_model_dir) {
+                if (nameMatchesQuery(name, query_lower)) {
+                    try {
+                        const sibr::GaussianModelDirectoryProbe probe = sibr::GaussianLoader::probeModelDirectory(boost::filesystem::path(entry_path.string()));
+                        if (probe.ok && push_entry(BrowseEntry{
+                            name,
+                            probe.canonical_model_dir.string(),
+                            "directory",
+                            "model_dir"
+                        })) {
+                            break;
+                        }
+                    } catch (const std::exception&) {
+                    }
+                }
+                it.disable_recursion_pending();
+            }
+            it.increment(iterator_error);
+            continue;
+        }
+
+        const bool is_regular_file = fs::is_regular_file(entry_path, status_error);
+        if (status_error || !is_regular_file) {
+            status_error.clear();
+            it.increment(iterator_error);
+            continue;
+        }
+        if (toLower(entry_path.extension().string()) != ".json" || !nameMatchesQuery(name, query_lower)) {
+            it.increment(iterator_error);
+            continue;
+        }
+
+        const sibr::ManifestProbeResult probe = sibr::ManifestStore::probe(boost::filesystem::path(entry_path.string()));
+        if (probe.ok && push_entry(BrowseEntry{
+            name,
+            probe.canonical_manifest_path.empty() ? entry_path.string() : probe.canonical_manifest_path.string(),
+            "manifest_file",
+            "manifest"
+        })) {
+            break;
+        }
+
+        it.increment(iterator_error);
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const BrowseEntry& lhs, const BrowseEntry& rhs) {
+        if (lhs.loadable_as != rhs.loadable_as) {
+            if (lhs.loadable_as == "model_dir") {
+                return true;
+            }
+            if (rhs.loadable_as == "model_dir") {
+                return false;
+            }
+            if (lhs.loadable_as == "manifest") {
+                return true;
+            }
+            if (rhs.loadable_as == "manifest") {
+                return false;
+            }
+        }
+        if (lhs.name != rhs.name) {
+            return lhs.name < rhs.name;
+        }
+        return lhs.path < rhs.path;
     });
     return entries;
 }
@@ -1421,6 +1569,48 @@ void RemoteStreamServer::serverThreadMain()
                     http::status::ok,
                     "application/json; charset=utf-8",
                     filesystemListJson(current_path, parent_path, entries));
+                closeSocket(socket);
+                continue;
+            }
+
+            if (target == "/api/fs/search") {
+                std::string query_error;
+                const std::string requested_query = queryParameterValue(raw_target, "q", query_error);
+                const std::string requested_path = queryParameterValue(raw_target, "path", query_error);
+                if (!query_error.empty()) {
+                    write_string_response(
+                        http::status::bad_request,
+                        "application/json; charset=utf-8",
+                        apiErrorJson(query_error));
+                    closeSocket(socket);
+                    continue;
+                }
+                if (requested_query.empty()) {
+                    write_string_response(
+                        http::status::bad_request,
+                        "application/json; charset=utf-8",
+                        apiErrorJson("Search query must not be empty."));
+                    closeSocket(socket);
+                    continue;
+                }
+
+                fs::path current_path;
+                std::string resolve_error;
+                if (!resolveBrowsePath(requested_path, current_path, resolve_error)) {
+                    write_string_response(
+                        http::status::bad_request,
+                        "application/json; charset=utf-8",
+                        apiErrorJson(resolve_error));
+                    closeSocket(socket);
+                    continue;
+                }
+
+                bool truncated = false;
+                const std::vector<BrowseEntry> entries = searchBrowseEntries(current_path, requested_query, truncated);
+                write_string_response(
+                    http::status::ok,
+                    "application/json; charset=utf-8",
+                    filesystemSearchJson(current_path, requested_query, truncated, entries));
                 closeSocket(socket);
                 continue;
             }

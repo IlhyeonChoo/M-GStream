@@ -243,14 +243,46 @@ std::string readFileBytes(const fs::path& path, std::string& error)
     return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
-fs::path defaultBrowseRoot()
+constexpr const char* kBrowseRootSentinel = "__ROOT__";
+
+fs::path filesystemRootPath()
+{
+    const fs::path current_path = fs::current_path();
+    const fs::path root_path = current_path.root_path();
+    return root_path.empty() ? current_path : root_path;
+}
+
+fs::path processHomeDirectoryPath()
 {
 #ifdef _WIN32
-    const fs::path root = fs::current_path().root_path();
-    return root.empty() ? fs::current_path() : root;
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile && *user_profile) {
+        return fs::path(user_profile);
+    }
+    const char* home_drive = std::getenv("HOMEDRIVE");
+    const char* home_path = std::getenv("HOMEPATH");
+    if (home_drive && *home_drive && home_path && *home_path) {
+        return fs::path(std::string(home_drive) + std::string(home_path));
+    }
 #else
-    return fs::path("/");
+    const char* home = std::getenv("HOME");
+    if (home && *home) {
+        return fs::path(home);
+    }
 #endif
+    return {};
+}
+
+fs::path defaultBrowseStartPath()
+{
+    const fs::path home_path = processHomeDirectoryPath();
+    if (!home_path.empty()) {
+        std::error_code error;
+        if (fs::exists(home_path, error) && !error && fs::is_directory(home_path, error) && !error) {
+            return home_path;
+        }
+    }
+    return filesystemRootPath();
 }
 
 std::string queryParameterValue(const std::string& target, const std::string& key, std::string& error)
@@ -296,7 +328,14 @@ std::string queryParameterValue(const std::string& target, const std::string& ke
 
 bool resolveBrowsePath(const std::string& raw_path, fs::path& canonical_path, std::string& error)
 {
-    fs::path requested = raw_path.empty() ? defaultBrowseRoot() : fs::path(raw_path);
+    fs::path requested;
+    if (raw_path.empty()) {
+        requested = defaultBrowseStartPath();
+    } else if (raw_path == kBrowseRootSentinel) {
+        requested = filesystemRootPath();
+    } else {
+        requested = fs::path(raw_path);
+    }
     if (!requested.is_absolute()) {
         error = "Browse path must be absolute.";
         return false;

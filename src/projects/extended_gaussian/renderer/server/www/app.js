@@ -657,6 +657,10 @@ async function browsePath(path = "", preserveSelection = true) {
 }
 
 async function browseRoot() {
+  await browsePath("__ROOT__", false);
+}
+
+async function browseInitialPath() {
   await browsePath("", false);
 }
 
@@ -1132,7 +1136,7 @@ function connectSocket() {
         }
         applyRendererState(rendererStateFromReadyMessage(message));
         if (!state.browse.currentPath) {
-          browseRoot().catch((error) => setBrowseStatus(error.message, true));
+          browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
         }
         setStatus("WebSocket ready. Camera pose synchronized.");
         return;
@@ -1246,7 +1250,7 @@ function applyDefaults() {
   const rotateSpeedValue = document.querySelector('.slider-row__value[data-for="rotate-speed"]'); if (rotateSpeedValue) rotateSpeedValue.textContent = String(Math.round(Number($("rotate-speed").value)));
   setStatus("disconnected"); updateStatusChip();
   formatPayload();
-  browseRoot().catch((error) => setBrowseStatus(error.message, true));
+  browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
 }
 
 function bindActions() {
@@ -1360,8 +1364,13 @@ function bindActions() {
   });
   $("sidebar-right-tab").addEventListener("click", () => { $("right-sidebar").classList.add("sidebar--open"); $("sidebar-right-tab").hidden = true; });
   $("toggle-file-panel").addEventListener("click", (event) => {
-    const panel = $("file-panel"); panel.hidden = !panel.hidden;
+    const panel = $("file-panel");
+    const willOpen = panel.hidden;
+    panel.hidden = !panel.hidden;
     event.currentTarget.classList.toggle("is-open", !panel.hidden); event.currentTarget.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    if (willOpen && !state.browse.currentPath) {
+      browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
+    }
   });
 }
 

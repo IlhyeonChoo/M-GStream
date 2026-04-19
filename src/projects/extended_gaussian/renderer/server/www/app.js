@@ -37,10 +37,12 @@ const CONTROL_KEY_CODES = new Set([
   "KeyD",
   "KeyQ",
   "KeyE",
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
+  "KeyI",
+  "KeyJ",
+  "KeyK",
+  "KeyL",
+  "KeyU",
+  "KeyO",
 ]);
 
 function $(id) {
@@ -837,18 +839,31 @@ class CameraController {
       up = basis.up;
       rotated = true;
     };
+    const applyRoll = (angleRad) => {
+      up = rotateAroundAxis(up, forward, angleRad);
+      basis = this.rebuildBasis(forward, up);
+      forward = basis.forward;
+      up = basis.up;
+      rotated = true;
+    };
 
-    if (this.keysPressed.ArrowLeft) {
+    if (this.keysPressed.KeyJ) {
       applyYaw(rotateAmount);
     }
-    if (this.keysPressed.ArrowRight) {
+    if (this.keysPressed.KeyL) {
       applyYaw(-rotateAmount);
     }
-    if (this.keysPressed.ArrowUp) {
+    if (this.keysPressed.KeyI) {
       applyPitch(rotateAmount);
     }
-    if (this.keysPressed.ArrowDown) {
+    if (this.keysPressed.KeyK) {
       applyPitch(-rotateAmount);
+    }
+    if (this.keysPressed.KeyU) {
+      applyRoll(rotateAmount);
+    }
+    if (this.keysPressed.KeyO) {
+      applyRoll(-rotateAmount);
     }
 
     if (moved) {

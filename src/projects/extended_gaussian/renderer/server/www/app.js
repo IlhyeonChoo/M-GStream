@@ -3,6 +3,7 @@ const state = {
   cameraController: null,
   healthPollTimer: null,
   loadWatchTimer: null,
+  statusError: false,
   manifestInfo: null,
   browse: {
     currentPath: "",
@@ -75,9 +76,22 @@ function configuredHttpOrigin() {
 }
 
 function setStatus(text, isError = false) {
+  state.statusError = Boolean(isError);
   const statusLine = $("status-line");
   statusLine.textContent = text;
   statusLine.dataset.error = isError ? "true" : "false";
+  const chipText = $("status-chip-text");
+  if (chipText) {
+    chipText.textContent = text;
+  }
+  updateStatusChip();
+}
+
+function updateStatusChip() {
+  const chip = document.getElementById("status-chip");
+  if (!chip) return;
+  const ok = !state.statusError && state.socket && state.socket.readyState === WebSocket.OPEN;
+  chip.classList.remove("topbar__chip--status--live", "topbar__chip--status--down"); chip.classList.add(ok ? "topbar__chip--status--live" : "topbar__chip--status--down");
 }
 
 function setBrowseStatus(text, isError = false) {
@@ -207,6 +221,13 @@ function normalizeWheelDelta(event) {
   return event.deltaY;
 }
 
+function basenameOf(path) {
+  if (typeof path !== "string" || !path.length) return "--";
+  const trimmed = path.replace(/[\/]+$/, ""); const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const base = idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
+  return base || "--";
+}
+
 function isTextEntryTarget(target) {
   if (!(target instanceof Element)) {
     return false;
@@ -260,6 +281,7 @@ function copyPoseToInputs(pose) {
 function syncPayloadTextareaFromPose(pose) {
   const payloadObject = payloadObjectFromPose(pose);
   $("payload").value = JSON.stringify(payloadObject, null, 2);
+  const prev = document.getElementById("live-pose-preview"); if (prev) prev.textContent = $("payload").value;
 }
 
 function syncPoseUi(pose) {
@@ -350,6 +372,15 @@ function updateLoadStatePanel(renderer) {
   $("load-state").value = state.rendererStatus.load_state;
   $("loaded-source-path").value = state.rendererStatus.loaded_source_path;
   $("last-load-error").value = state.rendererStatus.last_load_error;
+
+  const sceneStateChip = $("scene-state-chip");
+  const loadState = state.rendererStatus.load_state;
+  const chipSuffix = loadState === "loaded" ? "loaded" : loadState === "loading" ? "loading" : loadState === "error" ? "error" : "idle";
+  if (sceneStateChip) { sceneStateChip.textContent = loadState; sceneStateChip.className = `scene-card__chip-value scene-card__chip-value--${chipSuffix}`; }
+  const sceneTypeChip = $("scene-type-chip"); if (sceneTypeChip) sceneTypeChip.textContent = state.rendererStatus.loaded_source_kind || "--";
+  const sceneLoadedName = $("scene-loaded-name"); if (sceneLoadedName) sceneLoadedName.textContent = basenameOf(state.rendererStatus.loaded_source_path);
+  const loadedFileChip = $("loaded-file-chip"); if (loadedFileChip) loadedFileChip.hidden = !state.rendererStatus.content_loaded;
+  const loadedFileChipText = $("loaded-file-chip-text"); if (loadedFileChipText) loadedFileChipText.textContent = basenameOf(state.rendererStatus.loaded_source_path);
 }
 
 function applyRendererState(renderer) {
@@ -477,9 +508,11 @@ function setSelectedBrowseEntry(entry) {
   renderBrowseEntries();
 }
 
-function createBadge(text, loadable = false) {
+function createBadge(text, loadable = false, kind = "") {
   const badge = document.createElement("span");
-  badge.className = `browse-pill${loadable ? " loadable" : ""}`;
+  badge.className = "file-panel__badge";
+  if (loadable) badge.classList.add("file-panel__badge--loadable");
+  if (kind === "directory") badge.classList.add("file-panel__badge--directory");
   badge.textContent = text;
   return badge;
 }
@@ -490,7 +523,7 @@ function renderBrowseEntries() {
 
   if (!state.browse.entries.length) {
     const empty = document.createElement("p");
-    empty.className = "status small-text";
+    empty.className = "file-panel__footer-status";
     empty.textContent = "No entries found in this directory.";
     list.appendChild(empty);
     return;
@@ -498,38 +531,46 @@ function renderBrowseEntries() {
 
   state.browse.entries.forEach((entry) => {
     const row = document.createElement("div");
-    row.className = "browse-entry";
+    row.className = "file-panel__entry";
     if (state.browse.selectedEntry && state.browse.selectedEntry.path === entry.path) {
-      row.classList.add("selected");
+      row.classList.add("file-panel__entry--selected");
     }
 
-    const main = document.createElement("div");
-    main.className = "browse-entry-main";
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("class", "icon");
+    icon.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", `#icon-${entry.kind === "directory" ? "folder" : "file"}`);
+    icon.appendChild(use);
+    row.appendChild(icon);
 
-    const name = document.createElement("p");
-    name.className = "browse-entry-name";
+    const main = document.createElement("div");
+
+    const name = document.createElement("div");
+    name.className = "file-panel__entry-name";
     name.textContent = entry.name;
     main.appendChild(name);
 
-    const path = document.createElement("p");
-    path.className = "browse-entry-path";
+    const path = document.createElement("div");
+    path.className = "file-panel__entry-path";
     path.textContent = entry.path;
     main.appendChild(path);
 
     const badges = document.createElement("div");
-    badges.className = "browse-entry-badges";
-    badges.appendChild(createBadge(entry.kind));
+    badges.className = "file-panel__entry-badges";
+    badges.appendChild(createBadge(entry.kind, false, entry.kind));
     if (entry.loadable_as && entry.loadable_as !== "none") {
-      badges.appendChild(createBadge(`load as ${entry.loadable_as}`, true));
+      badges.appendChild(createBadge(`load as ${entry.loadable_as}`, true, entry.kind));
     }
     main.appendChild(badges);
 
     const actions = document.createElement("div");
-    actions.className = "browse-entry-actions";
+    actions.className = "file-panel__header-actions";
 
     if (entry.kind === "directory") {
       const openButton = document.createElement("button");
       openButton.type = "button";
+      openButton.className = "file-panel__header-btn";
       openButton.textContent = "Open";
       openButton.addEventListener("click", () => browsePath(entry.path, false));
       actions.appendChild(openButton);
@@ -537,6 +578,7 @@ function renderBrowseEntries() {
 
     const selectButton = document.createElement("button");
     selectButton.type = "button";
+    selectButton.className = "file-panel__header-btn";
     selectButton.textContent = "Select";
     selectButton.addEventListener("click", () => setSelectedBrowseEntry(entry));
     actions.appendChild(selectButton);
@@ -544,6 +586,7 @@ function renderBrowseEntries() {
     if (entry.loadable_as && entry.loadable_as !== "none") {
       const loadButton = document.createElement("button");
       loadButton.type = "button";
+      loadButton.className = "file-panel__header-btn";
       loadButton.textContent = "Load";
       loadButton.disabled = state.browse.pendingLoadSequence !== 0;
       loadButton.addEventListener("click", () => {
@@ -596,6 +639,7 @@ async function browsePath(path = "", preserveSelection = true) {
 
   $("browse-current-path").value = state.browse.currentPath;
   $("browse-parent-path").value = state.browse.parentPath;
+  $("browse-current-path-display").textContent = state.browse.currentPath || "/";
 
   const selectionPath = previousSelectedPath || (state.browse.selectedEntry ? state.browse.selectedEntry.path : "");
   const selectedEntry = selectionPath
@@ -680,6 +724,11 @@ function openStream() {
   const origin = configuredHttpOrigin();
   const streamUrl = new URL("/stream.mjpg", origin).toString();
   $("stream-preview").src = streamUrl;
+  const toggleStream = $("toggle-stream");
+  if (toggleStream) {
+    toggleStream.dataset.state = "open";
+    toggleStream.textContent = "⏹ Stop Stream";
+  }
   setStatus(`Stream opened: ${streamUrl}`);
 }
 
@@ -1037,6 +1086,7 @@ function disconnectSocket() {
     state.socket.close();
     state.socket = null;
   }
+  updateStatusChip();
 }
 
 function connectSocket() {
@@ -1048,6 +1098,7 @@ function connectSocket() {
 
   socket.addEventListener("open", () => {
     setStatus(`WebSocket connected: ${wsUrl}`);
+    updateStatusChip();
   });
 
   socket.addEventListener("close", () => {
@@ -1058,6 +1109,7 @@ function connectSocket() {
     }
     clearHealthPoll();
     clearLoadWatch();
+    updateStatusChip();
     if (state.socket === socket) {
       state.socket = null;
     }
@@ -1065,6 +1117,7 @@ function connectSocket() {
 
   socket.addEventListener("error", () => {
     setStatus("WebSocket connection error.", true);
+    updateStatusChip();
   });
 
   socket.addEventListener("message", (event) => {
@@ -1145,6 +1198,7 @@ function toggleCameraControl() {
 }
 
 function applyDefaults() {
+  state.statusError = false;
   $("http-origin").value = currentHttpOrigin();
   $("ws-url").value = currentWsUrl();
   $("move-speed").value = String(DEFAULT_MOVE_SPEED);
@@ -1161,9 +1215,20 @@ function applyDefaults() {
   state.browse.selectedEntry = null;
   $("browse-current-path").value = "";
   $("browse-parent-path").value = "";
+  $("browse-current-path-display").textContent = "/";
   $("browse-selected-path").value = "";
   $("browse-selected-kind").value = "";
   $("browse-selected-loadable").value = "";
+  $("left-sidebar").classList.add("sidebar--open");
+  $("sidebar-left-tab").hidden = true;
+  $("right-sidebar").classList.remove("sidebar--open");
+  $("sidebar-right-tab").hidden = false;
+  $("conn-dropdown").hidden = true;
+  $("toggle-conn").setAttribute("aria-expanded", "false");
+  $("file-panel").hidden = true;
+  $("toggle-file-panel").classList.remove("is-open");
+  $("toggle-file-panel").setAttribute("aria-expanded", "false");
+  $("stream-preview").src = "";
   renderBrowseEntries();
   setBrowseStatus("Browse the server filesystem and choose a model directory or manifest.");
   syncPoseUi({
@@ -1172,6 +1237,14 @@ function applyDefaults() {
     up: [0, 1, 0],
     fovy: DEFAULT_FOVY,
   });
+  const sceneLoadedName = $("scene-loaded-name"); if (sceneLoadedName) sceneLoadedName.textContent = "--";
+  const sceneTypeChip = $("scene-type-chip"); if (sceneTypeChip) sceneTypeChip.textContent = "--";
+  const sceneStateChip = $("scene-state-chip"); if (sceneStateChip) { sceneStateChip.textContent = "idle"; sceneStateChip.className = "scene-card__chip-value scene-card__chip-value--idle"; }
+  $("loaded-file-chip").hidden = true;
+  const toggleStream = $("toggle-stream"); if (toggleStream) { toggleStream.dataset.state = "closed"; toggleStream.textContent = "▶ Open Stream"; }
+  const moveSpeedValue = document.querySelector('.slider-row__value[data-for="move-speed"]'); if (moveSpeedValue) moveSpeedValue.textContent = Number($("move-speed").value).toFixed(2);
+  const rotateSpeedValue = document.querySelector('.slider-row__value[data-for="rotate-speed"]'); if (rotateSpeedValue) rotateSpeedValue.textContent = String(Math.round(Number($("rotate-speed").value)));
+  setStatus("disconnected"); updateStatusChip();
   formatPayload();
   browseRoot().catch((error) => setBrowseStatus(error.message, true));
 }
@@ -1248,14 +1321,12 @@ function bindActions() {
     }
   });
   $("move-speed").addEventListener("input", (event) => {
-    if (state.cameraController) {
-      state.cameraController.moveSpeed = Number(event.target.value);
-    }
+    if (state.cameraController) state.cameraController.moveSpeed = Number(event.target.value);
+    const valueLabel = document.querySelector('.slider-row__value[data-for="move-speed"]'); if (valueLabel) valueLabel.textContent = Number(event.target.value).toFixed(2);
   });
   $("rotate-speed").addEventListener("input", (event) => {
-    if (state.cameraController) {
-      state.cameraController.rotateSpeed = Number(event.target.value);
-    }
+    if (state.cameraController) state.cameraController.rotateSpeed = Number(event.target.value);
+    const valueLabel = document.querySelector('.slider-row__value[data-for="rotate-speed"]'); if (valueLabel) valueLabel.textContent = String(Math.round(Number(event.target.value)));
   });
   $("phase-select").addEventListener("change", (event) => {
     if (event.target.value) {
@@ -1266,6 +1337,31 @@ function bindActions() {
     if (event.target.value.trim()) {
       $("phase-select").value = "";
     }
+  });
+
+  $("toggle-conn").addEventListener("click", (event) => {
+    const dropdown = $("conn-dropdown"); dropdown.hidden = !dropdown.hidden;
+    event.currentTarget.setAttribute("aria-expanded", dropdown.hidden ? "false" : "true");
+  });
+  $("toggle-stream").addEventListener("click", () => {
+    const btn = $("toggle-stream"); const currentState = btn.dataset.state || "closed";
+    if (currentState === "closed") {
+      try { openStream(); btn.dataset.state = "open"; btn.textContent = "⏹ Stop Stream"; } catch (error) { setStatus(error.message, true); }
+    } else {
+      $("stream-preview").src = ""; btn.dataset.state = "closed"; btn.textContent = "▶ Open Stream"; setStatus("Stream closed.");
+    }
+  });
+  $("toggle-left").addEventListener("click", () => {
+    const sidebar = $("left-sidebar"); const tab = $("sidebar-left-tab"); tab.hidden = sidebar.classList.toggle("sidebar--open");
+  });
+  $("sidebar-left-tab").addEventListener("click", () => { $("left-sidebar").classList.add("sidebar--open"); $("sidebar-left-tab").hidden = true; });
+  $("toggle-right").addEventListener("click", () => {
+    const sidebar = $("right-sidebar"); const tab = $("sidebar-right-tab"); tab.hidden = sidebar.classList.toggle("sidebar--open");
+  });
+  $("sidebar-right-tab").addEventListener("click", () => { $("right-sidebar").classList.add("sidebar--open"); $("sidebar-right-tab").hidden = true; });
+  $("toggle-file-panel").addEventListener("click", (event) => {
+    const panel = $("file-panel"); panel.hidden = !panel.hidden;
+    event.currentTarget.classList.toggle("is-open", !panel.hidden); event.currentTarget.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
   });
 }
 

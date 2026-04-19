@@ -903,10 +903,10 @@ class CameraController {
       applyYaw(-rotateAmount);
     }
     if (this.keysPressed.KeyI) {
-      applyPitch(rotateAmount);
+      applyPitch(-rotateAmount);
     }
     if (this.keysPressed.KeyK) {
-      applyPitch(-rotateAmount);
+      applyPitch(rotateAmount);
     }
     if (this.keysPressed.KeyU) {
       applyRoll(rotateAmount);

@@ -23,7 +23,6 @@ const state = {
 
 const MIN_VECTOR_NORM = 1e-6;
 const PARALLEL_THRESHOLD = 0.999;
-const CAMERA_PITCH_ALIGNMENT_LIMIT = 0.99;
 const DEFAULT_FOVY = Math.PI / 4.0;
 const DEFAULT_MOVE_SPEED = 0.6;
 const DEFAULT_ROTATE_SPEED = 30.0;
@@ -174,6 +173,26 @@ function rotateAroundAxis(vector, axis, angleRad) {
   const term2 = vec3Scale(vec3Cross(normalizedAxis, vector), sinTheta);
   const term3 = vec3Scale(normalizedAxis, dot(normalizedAxis, vector) * (1.0 - cosTheta));
   return vec3Add(vec3Add(term1, term2), term3);
+}
+
+function fallbackUpHint(forwardVector) {
+  const candidates = [
+    WORLD_UP,
+    [1, 0, 0],
+    [0, 0, 1],
+  ];
+  let bestCandidate = WORLD_UP;
+  let bestCrossNorm = -1.0;
+
+  candidates.forEach((candidate) => {
+    const crossNorm = vectorNorm(vec3Cross(forwardVector, candidate));
+    if (crossNorm > bestCrossNorm) {
+      bestCrossNorm = crossNorm;
+      bestCandidate = candidate;
+    }
+  });
+
+  return bestCandidate.slice();
 }
 
 function normalizeWheelDelta(event) {
@@ -722,10 +741,12 @@ class CameraController {
       throw new Error("Forward vector must be non-zero.");
     }
 
-    let right = vec3Cross(normalizedForward, WORLD_UP);
-    if (vectorNorm(right) <= MIN_VECTOR_NORM) {
-      right = vec3Cross(normalizedForward, upHint);
+    let referenceUp = vectorNorm(upHint) > MIN_VECTOR_NORM ? vec3Normalize(upHint) : fallbackUpHint(normalizedForward);
+    if (Math.abs(dot(normalizedForward, referenceUp)) >= PARALLEL_THRESHOLD) {
+      referenceUp = fallbackUpHint(normalizedForward);
     }
+
+    let right = vec3Cross(normalizedForward, referenceUp);
     right = vec3Normalize(right);
     if (vectorNorm(right) <= MIN_VECTOR_NORM) {
       throw new Error("Camera basis became degenerate.");
@@ -741,11 +762,6 @@ class CameraController {
       up: rebuiltUp,
       right,
     };
-  }
-
-  canApplyPitch(forwardVector) {
-    const normalizedForward = vec3Normalize(forwardVector);
-    return Math.abs(dot(normalizedForward, WORLD_UP)) < CAMERA_PITCH_ALIGNMENT_LIMIT;
   }
 
   onKeyDown(event) {
@@ -770,13 +786,14 @@ class CameraController {
 
   processKeys(dt) {
     let position = this.position.slice();
-    let forward = this.forward.slice();
-    const up = this.up.slice();
+    let basis = this.rebuildBasis(this.forward, this.up);
+    let forward = basis.forward;
+    let up = basis.up;
     let moved = false;
     let rotated = false;
 
     const moveAmount = this.moveSpeed * dt;
-    const moveRight = vec3Normalize(vec3Cross(forward, up));
+    const moveRight = basis.right;
 
     if (this.keysPressed.KeyW) {
       position = vec3Add(position, vec3Scale(forward, moveAmount));
@@ -804,39 +821,40 @@ class CameraController {
     }
 
     const rotateAmount = this.rotateSpeed * (Math.PI / 180.0) * dt;
-    if (this.keysPressed.ArrowLeft) {
-      forward = rotateAroundAxis(forward, WORLD_UP, rotateAmount);
+    const applyYaw = (angleRad) => {
+      forward = rotateAroundAxis(forward, up, angleRad);
+      basis = this.rebuildBasis(forward, up);
+      forward = basis.forward;
+      up = basis.up;
       rotated = true;
+    };
+    const applyPitch = (angleRad) => {
+      const pitchAxis = basis.right;
+      forward = rotateAroundAxis(forward, pitchAxis, angleRad);
+      up = rotateAroundAxis(up, pitchAxis, angleRad);
+      basis = this.rebuildBasis(forward, up);
+      forward = basis.forward;
+      up = basis.up;
+      rotated = true;
+    };
+
+    if (this.keysPressed.ArrowLeft) {
+      applyYaw(rotateAmount);
     }
     if (this.keysPressed.ArrowRight) {
-      forward = rotateAroundAxis(forward, WORLD_UP, -rotateAmount);
-      rotated = true;
+      applyYaw(-rotateAmount);
     }
-
-    const pitchAxisCandidate = vec3Cross(forward, WORLD_UP);
-    if (vectorNorm(pitchAxisCandidate) > MIN_VECTOR_NORM) {
-      const pitchAxis = vec3Normalize(pitchAxisCandidate);
-      if (this.keysPressed.ArrowUp) {
-        const candidateForward = rotateAroundAxis(forward, pitchAxis, rotateAmount);
-        if (this.canApplyPitch(candidateForward)) {
-          forward = candidateForward;
-          rotated = true;
-        }
-      }
-      if (this.keysPressed.ArrowDown) {
-        const candidateForward = rotateAroundAxis(forward, pitchAxis, -rotateAmount);
-        if (this.canApplyPitch(candidateForward)) {
-          forward = candidateForward;
-          rotated = true;
-        }
-      }
+    if (this.keysPressed.ArrowUp) {
+      applyPitch(rotateAmount);
+    }
+    if (this.keysPressed.ArrowDown) {
+      applyPitch(-rotateAmount);
     }
 
     if (moved) {
       this.position = position;
     }
     if (rotated) {
-      const basis = this.rebuildBasis(forward, up);
       this.forward = basis.forward;
       this.up = basis.up;
     }
@@ -867,23 +885,24 @@ class CameraController {
     }
 
     let forward = this.forward.slice();
-    const up = this.up.slice();
+    let up = this.up.slice();
     const radiansPerPixel = this.mouseSensitivity * (Math.PI / 180.0);
+    let basis = this.rebuildBasis(forward, up);
 
     if (deltaX !== 0) {
-      forward = rotateAroundAxis(forward, WORLD_UP, -deltaX * radiansPerPixel);
+      forward = rotateAroundAxis(forward, up, -deltaX * radiansPerPixel);
+      basis = this.rebuildBasis(forward, up);
+      forward = basis.forward;
+      up = basis.up;
     }
 
-    const pitchAxisCandidate = vec3Cross(forward, WORLD_UP);
-    if (deltaY !== 0 && vectorNorm(pitchAxisCandidate) > MIN_VECTOR_NORM) {
-      const pitchAxis = vec3Normalize(pitchAxisCandidate);
-      const candidateForward = rotateAroundAxis(forward, pitchAxis, -deltaY * radiansPerPixel);
-      if (this.canApplyPitch(candidateForward)) {
-        forward = candidateForward;
-      }
+    if (deltaY !== 0) {
+      const pitchAxis = basis.right;
+      forward = rotateAroundAxis(forward, pitchAxis, -deltaY * radiansPerPixel);
+      up = rotateAroundAxis(up, pitchAxis, -deltaY * radiansPerPixel);
     }
 
-    const basis = this.rebuildBasis(forward, up);
+    basis = this.rebuildBasis(forward, up);
     this.forward = basis.forward;
     this.up = basis.up;
     this.lastMouseX = event.clientX;

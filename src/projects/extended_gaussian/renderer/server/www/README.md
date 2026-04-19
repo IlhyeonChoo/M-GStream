@@ -22,6 +22,8 @@ The current runtime exposes:
 
 - The reference page derives `/stream.mjpg` and `/control` from the current origin by default.
 - `app.js` formats `set_camera_pose` payloads, performs browser-side validation, and manages WebSocket open/close/send actions.
+- The browser camera controller uses the current camera basis for yaw/pitch, so it can pass straight up and straight down without a pitch clamp.
+- `Q` and `E` remain world-Y translation shortcuts.
 - The status line is diagnostic only. It is not a state machine for the final product UX.
 
 ## Current `/control` Contract

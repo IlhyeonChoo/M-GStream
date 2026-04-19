@@ -251,7 +251,8 @@ void MjpegStreamer::drainReadyReadbacks()
         frame->control_sequence = slot.control_sequence;
         frame->width = slot.width;
         frame->height = slot.height;
-        frame->bottom_up = true;
+        // The final render target is already in display orientation after the renderer copy pass.
+        frame->bottom_up = false;
         frame->capture_submit_time = slot.capture_submit_time;
         frame->raw_ready_time = std::chrono::steady_clock::now();
         frame->capture_submit_wall_time = slot.capture_submit_wall_time;
@@ -437,20 +438,24 @@ void MjpegStreamer::encoderThreadMain()
         }
 
         const size_t row_bytes = static_cast<size_t>(raw_frame->width) * 3;
-        top_down_rgb.resize(raw_frame->rgb_bytes.size());
-        for (int row = 0; row < raw_frame->height; ++row) {
-            const size_t src_index = static_cast<size_t>(raw_frame->height - 1 - row) * row_bytes;
-            const size_t dst_index = static_cast<size_t>(row) * row_bytes;
-            std::memcpy(top_down_rgb.data() + dst_index, raw_frame->rgb_bytes.data() + src_index, row_bytes);
+        const uint8_t* top_down_rgb_bytes = raw_frame->rgb_bytes.data();
+        if (raw_frame->bottom_up) {
+            top_down_rgb.resize(raw_frame->rgb_bytes.size());
+            for (int row = 0; row < raw_frame->height; ++row) {
+                const size_t src_index = static_cast<size_t>(raw_frame->height - 1 - row) * row_bytes;
+                const size_t dst_index = static_cast<size_t>(row) * row_bytes;
+                std::memcpy(top_down_rgb.data() + dst_index, raw_frame->rgb_bytes.data() + src_index, row_bytes);
+            }
+            top_down_rgb_bytes = top_down_rgb.data();
         }
 
         int output_width = raw_frame->width;
         int output_height = raw_frame->height;
-        const uint8_t* encode_rgb = top_down_rgb.data();
+        const uint8_t* encode_rgb = top_down_rgb_bytes;
 
         if (options_.stream_width > 0 && options_.stream_height > 0 &&
             (options_.stream_width != raw_frame->width || options_.stream_height != raw_frame->height)) {
-            cv::Mat input(raw_frame->height, raw_frame->width, CV_8UC3, top_down_rgb.data(), row_bytes);
+            cv::Mat input(raw_frame->height, raw_frame->width, CV_8UC3, const_cast<uint8_t*>(top_down_rgb_bytes), row_bytes);
             cv::Mat resized(options_.stream_height, options_.stream_width, CV_8UC3);
             cv::resize(input, resized, resized.size(), 0.0, 0.0, cv::INTER_LINEAR);
             const size_t resized_bytes = static_cast<size_t>(resized.cols) * static_cast<size_t>(resized.rows) * 3;

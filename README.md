@@ -1,149 +1,239 @@
-# M-GStream
-Built on top of SIBR (forked at IlhyeonChoo/sibr_core@M_GStream_ubuntu24).
+# M_GStream
 
-## SIBR Core
+M_GStream is a C++/CUDA Gaussian Splatting viewer/editor built on top of a pinned SIBR fork.
+It does not train models. Instead, it loads pre-trained Gaussian Splatting outputs from disk,
+stores them as CPU assets, creates scene instances that reference those assets, uploads shared
+GPU copies on demand, and renders composed scenes through an external CUDA rasterizer.
 
-Project-specific Ubuntu 24.04 remote browser stream guidance for `M_GStream` lives here:
+## What This Repository Does
 
+- Load Gaussian Splatting model directories or manifest JSON files.
+- Manage CPU assets, scene instances, and shared GPU caches.
+- Render composed scenes in real time with CUDA.
+- Provide a desktop viewer with ImGui-based controls.
+- Provide headless snapshot rendering.
+- Optionally provide an HTTP/MJPEG/WebSocket remote browser stream server.
+
+## What This Repository Does Not Do
+
+- Train Gaussian Splatting models.
+- Replace the full dataset preprocessing pipeline.
+- Contain the rasterizer kernel sources.
+
+The rasterizer is fetched at configure time from
+`graphdeco-inria/diff-gaussian-rasterization`.
+
+## Relationship to SIBR
+
+SIBR is part of the project architecture, but this README is intentionally project-centric.
+You should keep a short SIBR section because the build and runtime depend on a pinned SIBR fork,
+yet the README does not need to duplicate the upstream SIBR manual.
+
+In this repository:
+
+- SIBR provides the shared window, view, camera, render-target, and application framework.
+- `M_GStream` provides the Gaussian loader, scene/resource management, CUDA world-buffer assembly,
+  swap/manifest logic, viewer UI, and remote streaming code.
+
+The top-level CMake configuration fetches a pinned custom SIBR fork during configure.
+
+Pinned SIBR dependency:
+
+- Repository: `git@github.com:IlhyeonChoo/sibr_core.git`
+- Commit: `29b3cfcb186148fe6037a1d0204e9a1bfb0c3eaf`
+
+## Verified Environment
+
+The current repository state has been verified in this environment:
+
+- OS: Ubuntu 24.04
+- Generator: Ninja
+- Build type: Release
+- CMake: 3.28.3
+- C compiler: `/usr/bin/gcc-12`
+- C++ compiler: `/usr/bin/g++-12`
+- CUDA host compiler: `/usr/bin/g++-12`
+- CUDA compiler: `/usr/local/cuda-12.8/bin/nvcc`
+- CUDA toolkit: 12.8 (`nvcc 12.8.93`)
+- Remote stream build option: `SIBR_BUILD_REMOTE_STREAM=ON`
+
+This is the environment currently reflected by the checked build cache and installed binary in this
+checkout.
+
+## Expected Compatibility
+
+The codebase also contains platform-specific paths that suggest likely compatibility beyond the
+verified environment, but those should be treated as expected rather than confirmed unless you
+re-test them.
+
+- Windows 10/11 build scripts and packaging paths are present.
+- Visual Studio 2019 is still referenced in project tooling and install scripts.
+- Linux headless EGL rendering and remote browser streaming are first-class paths in the current
+  CMake configuration.
+- CMake 3.24 or newer is required by the top-level project.
+- Python 3.8 or newer is expected for build-side scripts and utilities.
+- NVIDIA GPU with CUDA support is required for rendering.
+
+Remote stream support defaults:
+
+- Linux: `SIBR_BUILD_REMOTE_STREAM=ON`
+- Windows: `SIBR_BUILD_REMOTE_STREAM=OFF`
+
+## Input Data
+
+### Model Directory
+
+The viewer expects a trained Gaussian Splatting result directory with this structure:
+
+```text
+<modelPath>/
+  cfg_args
+  point_cloud/
+    iteration_XXXX/
+      point_cloud.ply
+```
+
+The loader reads `cfg_args`, selects the latest `iteration_*` directory, and imports
+`point_cloud.ply`.
+
+### Manifest JSON
+
+The viewer can also load a manifest JSON file for phased or remote-controlled content loading:
+
+```text
+install/bin/M_GStreamViewer_app --manifest <manifest.json>
+```
+
+## Build
+
+This repository often keeps out-of-source build trees such as `build/` and `build-ninja/`.
+Reuse them if they already match the current checkout path.
+
+If the repository directory is renamed or moved, recreate the build tree before rebuilding.
+CMake caches absolute paths, and log macros such as `__FILE__` will continue to report the old
+source path until the affected targets are reconfigured and rebuilt.
+
+### Windows (Expected Path)
+
+Configure:
+
+```bat
+cmake -S . -B build -G "Visual Studio 16 2019" -A x64
+```
+
+Build and install:
+
+```bat
+cmake --build build --config Release --target M_GStreamViewer_app
+cmake --build build --config Release --target INSTALL
+```
+
+Main installed executable:
+
+```text
+install/bin/M_GStreamViewer_app.exe
+```
+
+### Linux (Verified Path)
+
+Configure:
+
+```sh
+cmake -S . -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Release -DSIBR_BUILD_REMOTE_STREAM=ON
+```
+
+Build and install:
+
+```sh
+cmake --build build-ninja --target M_GStreamViewer_app --parallel
+cmake --build build-ninja --target install --parallel
+```
+
+Main installed executable:
+
+```text
+install/bin/M_GStreamViewer_app
+```
+
+### Existing Configured Build Trees
+
+If the repository already contains a matching configured build tree, the canonical rebuild path is:
+
+```sh
+cmake --build build-ninja --target M_GStreamViewer_app --parallel
+cmake --build build-ninja --target install --parallel
+```
+
+## Run
+
+### Desktop Viewer
+
+Load a model directory:
+
+```text
+install/bin/M_GStreamViewer_app --path <modelPath>
+```
+
+Load a manifest:
+
+```text
+install/bin/M_GStreamViewer_app --manifest <manifest.json>
+```
+
+On Windows, use `install/bin/M_GStreamViewer_app.exe` instead.
+
+### Headless Snapshot
+
+Render a single snapshot without opening a visible window:
+
+```text
+install/bin/M_GStreamViewer_app --headless --render-width 1280 --render-height 720 --snapshot output.png --path <modelPath>
+```
+
+### Headless Remote Browser Stream
+
+Run the HTTP/MJPEG/WebSocket server in headless mode:
+
+```text
+install/bin/M_GStreamViewer_app --headless --server --listen-host 127.0.0.1 --listen-port 8080 --render-width 1280 --render-height 720 --stream-width 1280 --stream-height 720 --stream-fps 15 --path <modelPath>
+```
+
+Open the browser at:
+
+```text
+http://127.0.0.1:8080/
+```
+
+Useful endpoints:
+
+- `/` - reference client page
+- `/stream.mjpg` - MJPEG stream
+- `/control` - WebSocket control channel
+- `/healthz` - runtime health/status JSON
+
+## Security Note for Remote Streaming
+
+The remote stream server does not provide authentication or TLS.
+Do not expose it directly to the public internet.
+Use it only on loopback, a trusted LAN, or a trusted VPN.
+
+## Key Runtime Notes
+
+- The viewer assumes a primary IBR subview named `"Gaussian View"`.
+- `archive_system` and `UI_system` are placeholders; the implemented subsystem is `rendering_system`.
+- The loader parses SH degree 0 through 3, but downstream world buffers are currently laid out for degree 3.
+- The project keeps both per-asset shared GPU buffers and persistent world buffers reused across frames.
+
+## Validation
+
+There is no automated test suite, `ctest` target, or lint target in this repository.
+Validate changes by launching `M_GStreamViewer_app` in the mode you changed and exercising the
+relevant workflow directly.
+
+## Related Documents
+
+- `AGENTS.md`
+- `docs/M_GStream_code_flow_phase0_ko.md`
+- `docs/M_GStream_vs_sibr_viewer_ko.md`
+- `docs/sibr_gaussian_swap_detailed_design.md`
 - `docs/M_GStream_ubuntu24_remote_browser_stream_user_guide_ko.md`
-- `docs/M_GStream_remote_browser_stream_verification_report_ko.md`
-
-**SIBR** is a System for Image-Based Rendering.  
-It is built around the *sibr-core* in this repo and several *Projects* implementing published research papers.  
-For more complete documentation, see here: [SIBR Documentation](https://sibr.gitlabpages.inria.fr) 
-  
-This **SIBR core** repository provides :
-- a basic Image-Based Renderer
-- a per-pixel implementation of Unstructured Lumigraph (ULR)
-- several dataset tools & pipelines do process input images
-  
-Details on how to run in the documentation and in the section below.  
-If you use this code in a publication, please cite the system as follows:
-
-```
-@misc{sibr2020,
-   author       = "Bonopera, Sebastien and Esnault, Jerome and Prakash, Siddhant and Rodriguez, Simon and Thonat, Theo and Benadel, Mehdi and Chaurasia, Gaurav and Philip, Julien and Drettakis, George",
-   title        = "sibr: A System for Image Based Rendering",
-   year         = "2020",
-   url          = "https://gitlab.inria.fr/sibr/sibr_core"
-}
-```
-
-## Setup
-
-**Note**: The current release is for *Windows 10* only. We are planning a Linux release soon.
-
-#### Binary distribution
-
-The easiest way to use SIBR is to download the binary distribution. All steps described below, including all preprocessing for your datasets will work using this code.
-
-Download the distribution from the page: https://sibr.gitlabpages.inria.fr/download.html (Core, 57Mb); unzip the file and rename the directory "install".
-
-#### Install requirements
-
-- [**Visual Studio 2019**](https://visualstudio.microsoft.com/fr/downloads/)
-- [**Cmake 3.16+**](https://cmake.org/download)
-- [**7zip**](https://www.7-zip.org)
-- [**Python 3.8+**](https://www.python.org/downloads/) for shaders installation scripts and dataset preprocess scripts
-- [**Doxygen 1.8.17+**](https://www.doxygen.nl/download.html#srcbin) for documentation
-- [**CUDA 10.1+**](https://developer.nvidia.com/cuda-downloads) and [**CUDnn**](https://developer.nvidia.com/cudnn) if projects requires it
-
-Make sure Python, CUDA and Doxygen are in the PATH
-
-If you have Chocolatey, you can grab most of these with this command:
-
-```sh
-choco install cmake 7zip python3 doxygen.install cuda
-
-## Visual Studio is available on Chocolatey,
-## though we do advise to set it from Visual Studio Installer and to choose your licensing accordingly
-choco install visualstudio2019community
-```
-
-#### Generation of the solution
-
-- Checkout this repository's master branch:
-  
-  ```sh
-  ## through HTTPS
-  git clone https://gitlab.inria.fr/sibr/sibr_core.git -b master
-  ## through SSH
-  git clone git@gitlab.inria.fr:sibr/sibr_core.git -b master
-  ```
-- Run Cmake-gui once, select the repo root as a source directory, `build/` as the build directory. Configure, select the Visual Studio C++ Win64 compiler
-- Select the projects you want to generate among the BUILD elements in the list (you can group Cmake flags by categories to access those faster)
-- Generate
-
-#### Compilation
-
-- Open the generated Visual Studio solution (`build/sibr_projects.sln`)
-- Build the `ALL_BUILD` target, and then the `INSTALL` target
-- The compiled executables will be put in `install/bin`
-- TODO: are the DLLs properly installed?
-
-#### Compilation of the documentation
-
-- Open the generated Visual Studio solution (`build/sibr_projects.sln`)
-- Build the `DOCUMENTATION` target
-- Run `install/docs/index.html` in a browser
-
-
-## Scripts
-
-Some scripts will require you to install `PIL`, and `convert` from `ImageMagick`.
-
-```sh
-## To install pillow
-python -m pip install pillow
-
-## If you have Chocolatey, you can install imagemagick from this command
-choco install imagemagick
-```
-
-## Troubleshooting
-
-#### Bugs and Issues
-
-We will track bugs and issues through the Issues interface on gitlab. Inria gitlab does not allow creation of external accounts, so if you have an issue/bug please email <code>sibr@inria.fr</code> and we will either create a guest account or create the issue on our side.
-
-#### Cmake complaining about the version
-
-if you are the first to use a very recent Cmake version, you will have to update `CHECKED_VERSION` in the root `CmakeLists.txt`.
-
-#### Weird OpenCV error
-
-you probably selected the 32-bits compiler in Cmake-gui.
-
-#### `Cmd.exe failed with error 009` or similar
-
-make sure Python is installed and in the path. 
-
-#### `BUILD_ALL` or `INSTALL` fail because of a project you don't really need
-
-build and install each project separately by selecting the proper targets.
-
-#### Error in CUDA headers under Visual Studio 2019
-
-make sure CUDA >= 10.1 (first version to support VS2019) is installed.
-
-## To run an example
-
-For more details, please see the documentation: http://sibr.gitlabpages.inria.fr
-
-Download a dataset from: https://repo-sam.inria.fr/fungraph/sibr-datasets/
-
-e.g., the *sibr-museum-front* dataset in the *DATASETS_PATH* directory.
-
-```
-wget https://repo-sam.inria.fr/fungraph/sibr-datasets/museum_front27_ulr.zip
-```
-
-Once you have built the system or downloaded the binaries (see above), go to *install/bin* and you can run:
-```
-	sibr_ulrv2_app.exe --path DATASETS_PATH/sibr-museum-front
-```
-
-You will have an interactive viewer and you can navigate freely in the captured scene. 
-Our default interactive viewer has a main view running the algorithm and a top view to visualize the position of the calibrated cameras. By default you are in WASD mode, and can toggle to trackball using the "y" key. Please see the page [Interface](https://sibr.gitlabpages.inria.fr/docs/nightly/howto_sibr_useful_objects.html) for more details on the interface.
-
-Please see the documentation on how to create a dataset from your own scene, and the various other IBR algorithms available.

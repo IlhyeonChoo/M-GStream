@@ -15,7 +15,7 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type for single-config generators" FORCE)
 endif()
 
-project(extended_gaussian_split LANGUAGES C CXX)
+project(M_GStream LANGUAGES C CXX)
 
 include(CheckCXXCompilerFlag)
 get_filename_component(currentBuildTool "${CMAKE_BUILD_TOOL}" NAME_WE)
@@ -55,7 +55,7 @@ set(SIBR_PINNED_COMMIT
 message(STATUS "Fetching SIBR fork from ${SIBR_FORK_URL} @ ${SIBR_PINNED_COMMIT}")
 
 set(BUILD_DOCUMENTATION OFF CACHE BOOL "Disable SIBR documentation in the split repo" FORCE)
-set(BUILD_SIBR ON CACHE BOOL "Build SIBR core libraries required by extended_gaussian" FORCE)
+set(BUILD_SIBR ON CACHE BOOL "Build SIBR core libraries required by M_GStream" FORCE)
 set(BUILD_IBR_BASIC OFF CACHE BOOL "" FORCE)
 set(BUILD_IBR_DATASET_TOOLS OFF CACHE BOOL "" FORCE)
 set(BUILD_IBR_GAUSSIANVIEWER OFF CACHE BOOL "" FORCE)
@@ -178,7 +178,7 @@ if(NOT TARGET OpenMP::OpenMP_CXX AND DEFINED OpenMP_CXX_FLAGS)
     )
 endif()
 if(NOT TARGET OpenMP::OpenMP_CXX)
-    message(FATAL_ERROR "OpenMP::OpenMP_CXX target is required for extended_gaussianViewer_app.")
+    message(FATAL_ERROR "OpenMP::OpenMP_CXX target is required for M_GStreamViewer_app.")
 endif()
 
-add_subdirectory(src/projects/extended_gaussian)
+add_subdirectory(src/projects/M_GStream)

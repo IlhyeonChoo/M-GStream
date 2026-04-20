@@ -1,11 +1,12 @@
-Built on top of SIBR (forked at IlhyeonChoo/sibr_core@extended_gaussian_ubuntu24).
+# M-GStream
+Built on top of SIBR (forked at IlhyeonChoo/sibr_core@M_GStream_ubuntu24).
 
-# SIBR Core
+## SIBR Core
 
-Project-specific Ubuntu 24.04 remote browser stream guidance for `extended_gaussian` lives here:
+Project-specific Ubuntu 24.04 remote browser stream guidance for `M_GStream` lives here:
 
-- `docs/extended_gaussian_ubuntu24_remote_browser_stream_user_guide_ko.md`
-- `docs/extended_gaussian_remote_browser_stream_verification_report_ko.md`
+- `docs/M_GStream_ubuntu24_remote_browser_stream_user_guide_ko.md`
+- `docs/M_GStream_remote_browser_stream_verification_report_ko.md`
 
 **SIBR** is a System for Image-Based Rendering.  
 It is built around the *sibr-core* in this repo and several *Projects* implementing published research papers.  

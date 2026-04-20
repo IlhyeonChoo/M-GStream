@@ -64,10 +64,10 @@
 
 주요 파일:
 
-- `src/projects/extended_gaussian/renderer/resource/ManifestStore.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/resource/AssetLoadWorker.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapManager.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapPolicy.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/resource/ManifestStore.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/resource/AssetLoadWorker.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapManager.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapPolicy.{hpp,cpp}`
 - `manifests/*.json`
 - `tools/generate_cell_neighbor_manifest.py`
 
@@ -83,12 +83,12 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 
 주요 파일:
 
-- `src/projects/extended_gaussian/renderer/resource/ResourceManager.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/GaussianView.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/scene/GaussianInstance.{hpp,cpp}`
-- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/resource/ResourceManager.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/GaussianView.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/scene/GaussianInstance.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.{hpp,cpp}`
 
 ### 4.3 Windows install / portable bundle 정리
 
@@ -107,7 +107,7 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 
 주요 파일:
 
-- `src/projects/extended_gaussian/apps/extended_gaussianViewer/CMakeLists.txt`
+- `src/projects/M_GStream/apps/M_GStreamViewer/CMakeLists.txt`
 - `tools/windows/build_windows_portable_bundle.ps1`
 - `tools/windows/package_windows_portable_bundle.ps1`
 - `tools/windows/check_windows_runtime.ps1`
@@ -127,11 +127,11 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 
 주요 파일:
 
-- `docs/extended_gaussian_code_flow_v1_ko.md`
-- `docs/extended_gaussian_renderer_scene_review_notes_ko.md`
-- `docs/extended_gaussian_modification_log_ko.md`
-- `docs/extended_gaussian_windows_portable_bundle_ko.md`
-- `docs/extended_gaussian_windows_portable_bundle_review_ko.md`
+- `docs/M_GStream_code_flow_v1_ko.md`
+- `docs/M_GStream_renderer_scene_review_notes_ko.md`
+- `docs/M_GStream_modification_log_ko.md`
+- `docs/M_GStream_windows_portable_bundle_ko.md`
+- `docs/M_GStream_windows_portable_bundle_review_ko.md`
 - `plan/2026-04-08-windows-portable-bundle.md`
 - `plan/2026-04-08-windows-portable-bundle-review-followups.md`
 
@@ -159,10 +159,10 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 
 - 기본 인자 `tools/windows/build_windows_portable_bundle.ps1`
   - `build/` 기준 `RelWithDebInfo` build -> install -> package -> runtime-only preflight 통과
-  - bundle이 `extended_gaussianViewer_app_rwdi.exe`를 선택함
+  - bundle이 `M_GStreamViewer_app_rwdi.exe`를 선택함
 - `tools/windows/build_windows_portable_bundle.ps1 -BuildRoot .\\build-ninja -Config Debug`
   - single-config `Debug` build tree 기준 build -> install -> package -> runtime-only preflight 통과
-  - bundle이 `extended_gaussianViewer_app_d.exe`를 선택함
+  - bundle이 `M_GStreamViewer_app_d.exe`를 선택함
 - `tools/windows/check_windows_runtime.ps1`
   - 없는 manifest path는 `exit 3`
   - asset data root 누락 manifest는 `exit 2`
@@ -177,44 +177,44 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 
 - `.gitignore`
 - `CLAUDE.md`
-- `docs/extended_gaussian_code_flow_v1_ko.md`
-- `docs/extended_gaussian_modification_log_ko.md`
-- `docs/extended_gaussian_renderer_scene_review_notes_ko.md`
-- `docs/extended_gaussian_windows_portable_bundle_ko.md`
-- `docs/extended_gaussian_windows_portable_bundle_review_ko.md`
+- `docs/M_GStream_code_flow_v1_ko.md`
+- `docs/M_GStream_modification_log_ko.md`
+- `docs/M_GStream_renderer_scene_review_notes_ko.md`
+- `docs/M_GStream_windows_portable_bundle_ko.md`
+- `docs/M_GStream_windows_portable_bundle_review_ko.md`
 - `manifests/mc_small_aerial_c36_cell20_neighbors_only.json`
 - `manifests/mc_small_aerial_c36_neighbors_3x3.json`
 - `manifests/mc_small_aerial_c36_neighbors_3x3_cpu36_gpu9.json`
 - `plan/2026-04-08-windows-portable-bundle-review-followups.md`
 - `plan/2026-04-08-windows-portable-bundle.md`
-- `src/projects/extended_gaussian/apps/extended_gaussianViewer/CMakeLists.txt`
-- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
-- `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.hpp`
-- `src/projects/extended_gaussian/renderer/resource/AssetLoadWorker.cpp`
-- `src/projects/extended_gaussian/renderer/resource/AssetLoadWorker.hpp`
-- `src/projects/extended_gaussian/renderer/resource/GaussianLoader.cpp`
-- `src/projects/extended_gaussian/renderer/resource/GaussianLoader.hpp`
-- `src/projects/extended_gaussian/renderer/resource/ManifestStore.cpp`
-- `src/projects/extended_gaussian/renderer/resource/ManifestStore.hpp`
-- `src/projects/extended_gaussian/renderer/resource/ResourceManager.cpp`
-- `src/projects/extended_gaussian/renderer/resource/ResourceManager.hpp`
-- `src/projects/extended_gaussian/renderer/scene/GaussianInstance.cpp`
-- `src/projects/extended_gaussian/renderer/scene/GaussianInstance.hpp`
-- `src/projects/extended_gaussian/renderer/scene/GaussianScene.cpp`
-- `src/projects/extended_gaussian/renderer/scene/GaussianScene.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/GaussianView.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/GaussianView.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderGaussianInstance.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapManager.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapManager.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapPolicy.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/SwapPolicy.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUGaussianField.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUGaussianField.hpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.cpp`
-- `src/projects/extended_gaussian/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.hpp`
+- `src/projects/M_GStream/apps/M_GStreamViewer/CMakeLists.txt`
+- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/M_GStream/renderer/resource/AssetLoadWorker.cpp`
+- `src/projects/M_GStream/renderer/resource/AssetLoadWorker.hpp`
+- `src/projects/M_GStream/renderer/resource/GaussianLoader.cpp`
+- `src/projects/M_GStream/renderer/resource/GaussianLoader.hpp`
+- `src/projects/M_GStream/renderer/resource/ManifestStore.cpp`
+- `src/projects/M_GStream/renderer/resource/ManifestStore.hpp`
+- `src/projects/M_GStream/renderer/resource/ResourceManager.cpp`
+- `src/projects/M_GStream/renderer/resource/ResourceManager.hpp`
+- `src/projects/M_GStream/renderer/scene/GaussianInstance.cpp`
+- `src/projects/M_GStream/renderer/scene/GaussianInstance.hpp`
+- `src/projects/M_GStream/renderer/scene/GaussianScene.cpp`
+- `src/projects/M_GStream/renderer/scene/GaussianScene.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/GaussianView.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/GaussianView.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderGaussianInstance.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapManager.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapManager.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapPolicy.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapPolicy.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUGaussianField.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUGaussianField.hpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.cpp`
+- `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.hpp`
 - `tools/generate_cell_neighbor_manifest.py`
 - `tools/windows/build_windows_portable_bundle.ps1`
 - `tools/windows/check_windows_runtime.ps1`

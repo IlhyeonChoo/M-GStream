@@ -20,7 +20,7 @@ This file provides guidance for any coding agent or human contributor working wi
 
 ## 외부 의존성 경계
 
-실제 Gaussian 래스터라이즈 커널은 **이 저장소에 없습니다**. `src/projects/extended_gaussian/renderer/CMakeLists.txt` 가 configure 시점에 `https://github.com/graphdeco-inria/diff-gaussian-rasterization.git` 를 fetch 합니다.
+실제 Gaussian 래스터라이즈 커널은 **이 저장소에 없습니다**. `src/projects/M_GStream/renderer/CMakeLists.txt` 가 configure 시점에 `https://github.com/graphdeco-inria/diff-gaussian-rasterization.git` 를 fetch 합니다.
 
 본 저장소의 코드는 버퍼를 준비하고 그 래스터라이저를 호출만 합니다. forward/backward CUDA 커널 소스가 로컬에 보이지 않더라도 정상 — 저장소 안에서 찾으려 하지 마세요.
 
@@ -37,23 +37,23 @@ This file provides guidance for any coding agent or human contributor working wi
 
 ```sh
 # Ninja 로 빌드 + 설치
-cmake --build build-ninja --target extended_gaussianViewer_app
+cmake --build build-ninja --target M_GStreamViewer_app
 cmake --build build-ninja --target install --parallel
 # app만 install하고 싶으면 아래를 사용
-cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel
+cmake --build build-ninja --target M_GStreamViewer_app_install --parallel
 # 실행
-install/bin/extended_gaussianViewer_app.exe
+install/bin/M_GStreamViewer_app.exe
 # 문서
 cmake --build build-ninja --target DOCUMENTATION   # 출력: install/docs/index.html
 ```
 
 Visual Studio 쪽은 `build/sibr_projects.sln` 을 열어 `ALL_BUILD` → `INSTALL` 순으로 빌드.
 
-**테스트 스위트도, lint 타깃도 없습니다.** `ctest`, 단위 테스트 러너, 정적 분석 명령 모두 존재하지 않습니다. 변경 검증은 `extended_gaussianViewer_app` 을 직접 실행해서 합니다. Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로, 먼저 `cmake --build build-ninja --target install --parallel` 또는 `cmake --build build-ninja --target extended_gaussianViewer_app_install --parallel` 을 사용하세요. 필요한 타깃을 이미 빌드한 뒤에는 `cmake --install build-ninja` 도 동작합니다.
+**테스트 스위트도, lint 타깃도 없습니다.** `ctest`, 단위 테스트 러너, 정적 분석 명령 모두 존재하지 않습니다. 변경 검증은 `M_GStreamViewer_app` 을 직접 실행해서 합니다. Linux에서는 `cmake --install build-ninja` 가 누락된 타깃을 빌드하지 않으므로, 먼저 `cmake --build build-ninja --target install --parallel` 또는 `cmake --build build-ninja --target M_GStreamViewer_app_install --parallel` 을 사용하세요. 필요한 타깃을 이미 빌드한 뒤에는 `cmake --install build-ninja` 도 동작합니다.
 
 빌드 타깃:
-- `extended_gaussian` — 프로젝트 공유 라이브러리 (렌더러 코드)
-- `extended_gaussianViewer_app` — 사용자가 실제로 실행하는 실행 파일
+- `M_GStream` — 프로젝트 공유 라이브러리 (렌더러 코드)
+- `M_GStreamViewer_app` — 사용자가 실제로 실행하는 실행 파일
 
 ## 런타임 흐름
 
@@ -84,12 +84,12 @@ main
 
 렌더링 버그를 추적할 때 진입 순서:
 
-1. `src/projects/extended_gaussian/apps/extended_gaussianViewer/main.cpp`
-2. `src/projects/extended_gaussian/renderer/ExtendedGaussianViewer.cpp`
-3. `src/projects/extended_gaussian/renderer/subsystem/rendering_system/RenderingSystem.cpp`
+1. `src/projects/M_GStream/apps/M_GStreamViewer/main.cpp`
+2. `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+3. `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.cpp`
 4. `src/core/view/MultiViewManager.cpp`
 5. `src/core/view/RenderingMode.cpp`
-6. `src/projects/extended_gaussian/renderer/subsystem/rendering_system/GaussianView.cpp`
+6. `src/projects/M_GStream/renderer/subsystem/rendering_system/GaussianView.cpp`
 
 ## 데이터 모델: 4-객체 분리 (혼동 주의)
 
@@ -178,10 +178,10 @@ UI "Create New Instance"
 
 ## Key Files By Responsibility
 
-모든 경로는 `src/projects/extended_gaussian/` 기준. 디렉터리만 표시된 항목은 해당 디렉터리 전체를 하나의 응집된 단위로 다루세요 — 개별 파일은 `ls` / `Glob` 으로 확인.
+모든 경로는 `src/projects/M_GStream/` 기준. 디렉터리만 표시된 항목은 해당 디렉터리 전체를 하나의 응집된 단위로 다루세요 — 개별 파일은 `ls` / `Glob` 으로 확인.
 
 ### Entry / App Shell
-- `apps/extended_gaussianViewer/main.cpp`
+- `apps/M_GStreamViewer/main.cpp`
 - `renderer/ExtendedGaussianViewer.{hpp,cpp}`
 
 ### CPU Asset / Scene
@@ -207,10 +207,10 @@ UI "Create New Instance"
 
 더 깊은 한국어 워크스루와 설계 컨텍스트가 필요할 때:
 
-- `docs/extended_gaussian_branch_commit_rules_ko.md` — 브랜치 전략, 커밋 prefix, PR/merge 규칙
-- `docs/extended_gaussian_code_flow_phase0_ko.md` — 현재 Phase 0 기준 런타임 워크스루
-- `docs/extended_gaussian_modification_log_ko.md` — 변경 이력
-- `docs/extended_gaussian_vs_sibr_viewer_ko.md` — 본 뷰어와 upstream SIBR 뷰어의 차이
+- `docs/M_GStream_branch_commit_rules_ko.md` — 브랜치 전략, 커밋 prefix, PR/merge 규칙
+- `docs/M_GStream_code_flow_phase0_ko.md` — 현재 Phase 0 기준 런타임 워크스루
+- `docs/M_GStream_modification_log_ko.md` — 변경 이력
+- `docs/M_GStream_vs_sibr_viewer_ko.md` — 본 뷰어와 upstream SIBR 뷰어의 차이
 - `docs/sibr_gaussian_swap_detailed_design.md` — PLY swap 설계
 
 `README.md` 는 upstream SIBR Core 문서이지 본 프로젝트 전용 문서가 아닙니다. SIBR 빌드 사전 요구사항 확인 용도로만 사용하세요.

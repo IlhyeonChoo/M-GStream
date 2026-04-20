@@ -1,3 +1,5 @@
+Built on top of SIBR (forked at IlhyeonChoo/sibr_core@extended_gaussian_ubuntu24).
+
 # SIBR Core
 
 Project-specific Ubuntu 24.04 remote browser stream guidance for `extended_gaussian` lives here:
@@ -144,4 +146,3 @@ You will have an interactive viewer and you can navigate freely in the captured 
 Our default interactive viewer has a main view running the algorithm and a top view to visualize the position of the calibrated cameras. By default you are in WASD mode, and can toggle to trackball using the "y" key. Please see the page [Interface](https://sibr.gitlabpages.inria.fr/docs/nightly/howto_sibr_useful_objects.html) for more details on the interface.
 
 Please see the documentation on how to create a dataset from your own scene, and the various other IBR algorithms available.
-

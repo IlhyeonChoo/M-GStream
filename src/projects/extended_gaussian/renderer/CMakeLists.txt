@@ -46,6 +46,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 if(TARGET CudaRasterizer)
     set_target_properties(CudaRasterizer PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
         CUDA_ARCHITECTURES "${EXTENDED_GAUSSIAN_EFFECTIVE_CUDA_ARCHITECTURES}"
     )
 endif()

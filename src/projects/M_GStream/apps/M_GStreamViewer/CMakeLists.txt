@@ -55,6 +55,11 @@ target_link_libraries(${PROJECT_NAME}
 	sibr_assets
 	sibr_renderer
 )
+if(NOT WIN32)
+	set_target_properties(${PROJECT_NAME} PROPERTIES
+		INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib"
+	)
+endif()
 if(TARGET M_GStream_server)
 	target_link_libraries(${PROJECT_NAME} M_GStream_server)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD=1)
@@ -109,15 +114,68 @@ endif()
 
 ## High level macro to install in an homogen way all our ibr targets
 include(install_runtime)
+set(M_GSTREAM_INSTALL_PDB_FLAG "")
+if(MSVC)
+	set(M_GSTREAM_INSTALL_PDB_FLAG INSTALL_PDB)
+endif()
+if(NOT WIN32)
+	if(DEFINED CMAKE_BUILD_TYPE)
+		resourceFile(ADD "shaders/core" "resources/core"
+			CONFIG_TYPE ${CMAKE_BUILD_TYPE}
+			FILE_PATH "${CMAKE_INSTALL_PREFIX_${CMAKE_BUILD_TYPE}}/ibr_resources.ini"
+		)
+	endif()
+	foreach(CONFIG_TYPES ${CMAKE_CONFIGURATION_TYPES})
+		string(TOUPPER ${CONFIG_TYPES} CONFIG_TYPES_UC)
+		resourceFile(ADD "shaders/core" "resources/core"
+			CONFIG_TYPE ${CONFIG_TYPES}
+			FILE_PATH "${CMAKE_INSTALL_PREFIX_${CONFIG_TYPES_UC}}/ibr_resources.ini"
+		)
+	endforeach()
+endif()
 ibr_install_target(${PROJECT_NAME}
-    INSTALL_PDB                         ## mean install also MSVC IDE *.pdb file (DEST according to target type)
+    ${M_GSTREAM_INSTALL_PDB_FLAG}       ## mean install also MSVC IDE *.pdb file (DEST according to target type)
 	RESOURCES  	${RESOURCES}
 	SCRIPTS     ${WINDOWS_PORTABLE_SCRIPT} ${WINDOWS_PORTABLE_CHECK_SCRIPT}
 	RSC_FOLDER 	"M_GStream"
 	DIRS        ${LINUX_REMOTE_STREAM_RUNTIME_DIRS}
     STANDALONE  ${INSTALL_STANDALONE}   ## mean call install_runtime with bundle dependencies resolution
-    COMPONENT   ${PROJECT_NAME}_install ## will create custom target to install only this project
+	COMPONENT   ${PROJECT_NAME}_install ## will create custom target to install only this project
 )
+
+if(NOT WIN32)
+	if(DEFINED sibr_core_SOURCE_DIR)
+		install(DIRECTORY "${sibr_core_SOURCE_DIR}/install/lib/"
+			DESTINATION lib
+			COMPONENT ${PROJECT_NAME}_install
+			OPTIONAL
+			FILES_MATCHING PATTERN "libsibr_*.so*"
+		)
+		install(DIRECTORY "${sibr_core_SOURCE_DIR}/install/shaders/core/"
+			DESTINATION shaders/core
+			COMPONENT ${PROJECT_NAME}_install
+			OPTIONAL
+		)
+		install(DIRECTORY "${sibr_core_SOURCE_DIR}/install/resources/core/"
+			DESTINATION resources/core
+			COMPONENT ${PROJECT_NAME}_install
+			OPTIONAL
+		)
+	endif()
+
+	install(DIRECTORY "${CMAKE_SOURCE_DIR}/extlibs/xatlas/build/"
+		DESTINATION lib
+		COMPONENT ${PROJECT_NAME}_install
+		OPTIONAL
+		FILES_MATCHING PATTERN "libxatlas.so*"
+	)
+	install(DIRECTORY "${CMAKE_SOURCE_DIR}/extlibs/mrf/build/"
+		DESTINATION lib
+		COMPONENT ${PROJECT_NAME}_install
+		OPTIONAL
+		FILES_MATCHING PATTERN "libmrf.so*"
+	)
+endif()
 
 if(TARGET M_GStream_server)
 	install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/projects/M_GStream/renderer/server/www/

@@ -112,6 +112,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(sibr_core)
 
+if(NOT WIN32 AND TARGET sibr_graphics AND OPENGL_egl_LIBRARY)
+    # Enable the direct headless EGL code path in SIBR Window when EGL is available.
+    target_compile_definitions(sibr_graphics PUBLIC GLEW_EGL)
+    target_link_libraries(sibr_graphics "${OPENGL_egl_LIBRARY}")
+    set_property(TARGET sibr_graphics APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${OPENGL_egl_LIBRARY}")
+endif()
+
 # Keep install artifacts for split-repo targets under this repository instead
 # of the fetched dependency checkout.
 set(CMAKE_INSTALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/install")

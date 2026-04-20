@@ -104,8 +104,12 @@ endif()
 
 ## High level macro to install
 include(install_runtime)
+set(M_GSTREAM_INSTALL_PDB_FLAG "")
+if(MSVC)
+    set(M_GSTREAM_INSTALL_PDB_FLAG INSTALL_PDB)
+endif()
 ibr_install_target(${PROJECT_NAME}
-    INSTALL_PDB
+    ${M_GSTREAM_INSTALL_PDB_FLAG}
     SHADERS ${SHADERS}
     RSC_FOLDER ${CNU_PROJECT}
     COMPONENT   ${PROJECT_NAME}_install

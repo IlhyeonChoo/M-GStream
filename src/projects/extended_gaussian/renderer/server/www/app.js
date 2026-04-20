@@ -498,7 +498,7 @@ function startLoadWatch(sequence) {
 function updateLoadButtonAvailability() {
   const selected = state.browse.selectedEntry;
   const hasPendingLoad = state.browse.pendingLoadSequence !== 0;
-  const canLoad = Boolean(selected && selected.loadable_as && selected.loadable_as !== "none");
+  const canLoad = isBrowseEntryLoadable(selected);
   if (hasPendingLoad) {
     setLoadButtonState(true, `Loading (seq=${state.browse.pendingLoadSequence})`);
     return;
@@ -515,13 +515,42 @@ function setSelectedBrowseEntry(entry) {
   renderBrowseEntries();
 }
 
-function createBadge(text, loadable = false, kind = "") {
+function createBadge(text, loadable = false, kind = "", hint = "") {
   const badge = document.createElement("span");
   badge.className = "file-panel__badge";
   if (loadable) badge.classList.add("file-panel__badge--loadable");
   if (kind === "directory") badge.classList.add("file-panel__badge--directory");
-  badge.textContent = text;
+  const label = document.createElement("span");
+  label.textContent = text;
+  badge.appendChild(label);
+  if (hint) {
+    const hintNode = document.createElement("small");
+    hintNode.textContent = ` ${hint}`;
+    badge.appendChild(hintNode);
+  }
   return badge;
+}
+
+function isCandidateLoadable(loadableAs) {
+  return loadableAs === "candidate_model_dir" || loadableAs === "candidate_manifest";
+}
+
+function isResolvedLoadable(loadableAs) {
+  return loadableAs === "model_dir" || loadableAs === "manifest";
+}
+
+function isBrowseEntryLoadable(entry) {
+  return Boolean(entry && entry.loadable_as && entry.loadable_as !== "none");
+}
+
+function describeLoadableBadge(loadableAs) {
+  if (loadableAs === "candidate_model_dir") {
+    return { text: "load as model_dir", hint: "(unverified)" };
+  }
+  if (loadableAs === "candidate_manifest") {
+    return { text: "load as manifest", hint: "(unverified)" };
+  }
+  return { text: `load as ${loadableAs}`, hint: "" };
 }
 
 function clearBrowseSelectionFields() {
@@ -607,8 +636,9 @@ function renderBrowseEntries() {
     const badges = document.createElement("div");
     badges.className = "file-panel__entry-badges";
     badges.appendChild(createBadge(entry.kind, false, entry.kind));
-    if (entry.loadable_as && entry.loadable_as !== "none") {
-      badges.appendChild(createBadge(`load as ${entry.loadable_as}`, true, entry.kind));
+    if (isBrowseEntryLoadable(entry)) {
+      const loadableBadge = describeLoadableBadge(entry.loadable_as);
+      badges.appendChild(createBadge(loadableBadge.text, true, entry.kind, loadableBadge.hint));
     }
     main.appendChild(badges);
 
@@ -636,16 +666,16 @@ function renderBrowseEntries() {
     selectButton.addEventListener("click", () => setSelectedBrowseEntry(entry));
     actions.appendChild(selectButton);
 
-    if (entry.loadable_as && entry.loadable_as !== "none") {
+    if (isBrowseEntryLoadable(entry)) {
       const loadButton = document.createElement("button");
       loadButton.type = "button";
       loadButton.className = "file-panel__header-btn";
       loadButton.textContent = "Load";
       loadButton.disabled = state.browse.pendingLoadSequence !== 0;
-      loadButton.addEventListener("click", () => {
+      loadButton.addEventListener("click", async () => {
         try {
           setSelectedBrowseEntry(entry);
-          loadSelectedContent();
+          await loadSelectedContent();
         } catch (error) {
           setStatus(error.message, true);
         }
@@ -808,11 +838,49 @@ function ensureSocketConnected() {
   }
 }
 
-function loadSelectedContent() {
+async function probeBrowseEntry(entry) {
+  const url = new URL("/api/fs/probe", configuredHttpOrigin());
+  url.searchParams.set("path", entry.path);
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = null;
+  }
+
+  if (!response.ok || !payload || !payload.ok) {
+    const errorMessage = payload && payload.error
+      ? payload.error
+      : `Probe failed: HTTP ${response.status}`;
+    setStatus(errorMessage, true);
+    return null;
+  }
+
+  return payload;
+}
+
+async function loadSelectedContent() {
   ensureSocketConnected();
   const entry = state.browse.selectedEntry;
-  if (!entry || !entry.loadable_as || entry.loadable_as === "none") {
+  if (!isBrowseEntryLoadable(entry)) {
     throw new Error("Select a loadable model directory or manifest first.");
+  }
+
+  if (isCandidateLoadable(entry.loadable_as)) {
+    const payload = await probeBrowseEntry(entry);
+    if (!payload) {
+      return;
+    }
+
+    entry.path = String(payload.canonical_path || entry.path);
+    entry.loadable_as = String(payload.kind || entry.loadable_as);
+    if (!isResolvedLoadable(entry.loadable_as)) {
+      setStatus("Probe returned an unsupported load target.", true);
+      return;
+    }
+    setSelectedBrowseEntry(entry);
   }
 
   state.socket.send(JSON.stringify({
@@ -1433,9 +1501,9 @@ function bindActions() {
   $("browse-refresh").addEventListener("click", () => {
     refreshBrowsePanel().catch((error) => setBrowseStatus(error.message, true));
   });
-  $("load-selected").addEventListener("click", () => {
+  $("load-selected").addEventListener("click", async () => {
     try {
-      loadSelectedContent();
+      await loadSelectedContent();
     } catch (error) {
       setStatus(error.message, true);
     }

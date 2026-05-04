@@ -19,7 +19,7 @@ namespace sibr {
 		std::string error;
 	};
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianLoader {
+	class SIBR_MGSTREAM_EXPORT GaussianLoader {
 	public:
 		SIBR_CLASS_PTR(GaussianLoader);
 

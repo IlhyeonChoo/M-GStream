@@ -8,7 +8,7 @@
 namespace sibr {
 	class GaussianField;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GPUGaussianField {
+	class SIBR_MGSTREAM_EXPORT GPUGaussianField {
 	public:
 		SIBR_CLASS_PTR(GPUGaussianField);
 

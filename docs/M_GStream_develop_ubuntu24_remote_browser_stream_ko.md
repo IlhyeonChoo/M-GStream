@@ -37,7 +37,7 @@
 - 실제 MJPEG 스트리밍 구현
 - 실제 WebSocket server 구현
 - headless EGL context 연결
-- `main.cpp`, `ExtendedGaussianViewer`, `RenderingSystem`, `GaussianView`와의 런타임 연결
+- `main.cpp`, `MGStreamViewer`, `RenderingSystem`, `GaussianView`와의 런타임 연결
 
 ## 3. 이번 브랜치에서 추가된 핵심 파일
 
@@ -280,8 +280,8 @@ JSON shape는 다음과 같다.
 
 - `src/core/graphics/Window.cpp`
 - `src/projects/M_GStream/apps/M_GStreamViewer/main.cpp`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.hpp`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.hpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.cpp`
 
 핵심 변경은 다음과 같다.
 
@@ -296,7 +296,7 @@ JSON shape는 다음과 같다.
   를 정식 CLI 인자로 추가했다.
   - interactive loop와 별도로 finite headless loop를 추가했다.
   - headless mode에서는 `offscreen`, `nogui`, `vsync=0`을 강제로 적용하고 margin constructor 대신 size-based `Window` 경로를 사용한다.
-- `ExtendedGaussianViewer`
+- `MGStreamViewer`
   - GUI가 비활성 상태일 때 top-level ImGui 경로를 타지 않도록 guard를 추가했다.
   - raw model directory를 바로 load해서 scene instance를 만들 수 있는 helper를 추가했다.
   - `"Gaussian View"` subview를 PNG로 저장하는 snapshot helper를 추가했다.
@@ -493,12 +493,12 @@ M4에서는 `M_GStreamViewer_app` 안에 `RemoteStreamServer` 를 연결해, no-
   - `/`, `/index.html`, `/app.js`, `/styles.css`, `/static/*` 정적 자산 서빙 구현
   - `/stream.mjpg` 는 501 placeholder, `/control` 은 426 Upgrade Required placeholder 구현
   - percent-decoding + path traversal 방어 추가
-- `ExtendedGaussianViewer.*`
+- `MGStreamViewer.*`
   - M4 health snapshot 에 쓰기 위한 read-only getter (`getAppTimeSeconds`, `getFrameIndex`, `getCurrentPhase`) 노출
 - CMake / install wiring
   - `src/projects/M_GStream/CMakeLists.txt` 에서 `renderer` 를 `apps` 보다 먼저 add 하도록 순서 수정
     - 이유: app CMake 가 `M_GStream_server` target 존재를 볼 수 있어야 app link 와 compile definition 이 적용됨
-  - `apps/M_GStreamViewer/CMakeLists.txt` 에서 app 이 `M_GStream_server` 를 link 하고 `SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD=1` 을 받도록 수정
+  - `apps/M_GStreamViewer/CMakeLists.txt` 에서 app 이 `M_GStream_server` 를 link 하고 `SIBR_MGSTREAM_REMOTE_STREAM_BUILD=1` 을 받도록 수정
   - `www` install destination 을 `resources/M_GStream/server/www` 로 맞춤
   - `RemoteStreamServer` 의 install lookup 경로도 `resources/M_GStream/server/www` 를 우선 탐색하도록 수정
 
@@ -605,7 +605,7 @@ M5에서는 M4의 HTTP skeleton 위에 실제 MJPEG frame delivery 경로를 연
   - shutdown 시 current GL context 아래에서 `releaseRenderThreadResources()` 를 먼저 호출한 뒤 `server->stop()` 하도록 유지
   - `--headless --server` 는 더 이상 finite snapshot mode 가 아니라 offscreen no-GUI long-running server mode 로 동작
   - `--server --path <model_dir>` 조합일 때 GUI import 없이 model directory 를 자동 load 하도록 추가
-- `ExtendedGaussianViewer.*`
+- `MGStreamViewer.*`
   - M4에서 추가한 read-only getters 를 그대로 사용하고, capture source 는 계속 `"Gaussian View"` render target 으로 고정
 - `renderer/server/CMakeLists.txt`
   - M5 source files (`JpegEncoder`, `MjpegStreamer`) 를 `M_GStream_server` target 에 추가
@@ -701,7 +701,7 @@ M6에서는 M5의 MJPEG stream 위에 실제 WebSocket camera control 경로를 
 
 핵심 구현 범위:
 
-- `renderer/ExtendedGaussianViewer.*`
+- `renderer/MGStreamViewer.*`
   - `"Gaussian View"` subview 의 현재 카메라를 읽는 getter 와 새 카메라를 적용하는 setter 를 추가했다.
   - interactive camera handler 가 있으면 handler 를 통해 state 를 갱신하고, 그렇지 않으면 subview camera 를 직접 갱신한다.
 - `apps/M_GStreamViewer/main.cpp`
@@ -957,7 +957,7 @@ M8에서는 서버 C++ 경로를 건드리지 않고, 브라우저 reference cli
 핵심 구현 포인트:
 
 - `ServerProtocol` 은 `set_phase` payload 를 별도 분기로 파싱하고 camera pose validation 과 분리했다.
-- `ExtendedGaussianViewer` 는 remote control 경로에서 바로 사용할 수 있도록 phase setter/getter 와 manifest summary getter 를 공개했다.
+- `MGStreamViewer` 는 remote control 경로에서 바로 사용할 수 있도록 phase setter/getter 와 manifest summary getter 를 공개했다.
 - `main.cpp` 는 `SetPhase` 를 viewer `_currentPhase` 변경으로 연결하고, health snapshot 에 `SwapManager::Stats` 를 실었다.
 - `RemoteStreamServer` 는 `/healthz`, `ready`, `ack` 를 모두 확장해 browser client 가 별도 ImGui 없이도 manifest 상태를 관찰할 수 있게 했다.
 - browser client 는 `set_phase` 단발 요청만 status line 에 노출하고, 연속 `set_camera_pose` ack 는 여전히 숨겨 camera control UX 의 노이즈를 줄였다.

@@ -26,7 +26,7 @@ namespace sibr {
 	class BufferCopyRenderer;
 	class GPUGaussianField;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianView : public sibr::ViewBase
+	class SIBR_MGSTREAM_EXPORT GaussianView : public sibr::ViewBase
 	{
 	public:
 		SIBR_CLASS_PTR(GaussianView);

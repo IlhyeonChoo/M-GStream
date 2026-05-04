@@ -1,4 +1,4 @@
-# Extended Gaussian Renderer/Scene Re-review Notes
+# MGStream Renderer/Scene Re-review Notes
 
 ## 목적
 
@@ -20,7 +20,7 @@
 - `src/projects/M_GStream/renderer/resource/ResourceManager.cpp`
 - `src/projects/M_GStream/renderer/subsystem/rendering_system/SwapManager.cpp`
 - `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.cpp`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.cpp`
 
 ### scene transform / hot path refactor 관련
 
@@ -70,7 +70,7 @@
 주의할 점:
 
 - 제거된 API를 직접 또는 간접으로 기대하던 호출부가 더 없는지 전체 검색으로 확인
-- `RenderingSystem`, `ExtendedGaussianViewer`, `SwapManager` 외에 숨은 호출부가 없는지 확인
+- `RenderingSystem`, `MGStreamViewer`, `SwapManager` 외에 숨은 호출부가 없는지 확인
 - `getCpuFieldShared()`를 받은 후 `.get()`으로 raw pointer를 넘기는 경로가 object lifetime을 충분히 보장하는지 확인
 
 권장 확인:
@@ -158,7 +158,7 @@
 
 핵심 변경:
 
-- `ExtendedGaussianViewer.cpp`에서 `EvictQueued` 라벨 표시
+- `MGStreamViewer.cpp`에서 `EvictQueued` 라벨 표시
 - asset detail 조회를 `getCpuFieldShared()`로 변경
 - rotation editor가 `getEulerRef()`를 사용하도록 변경
 

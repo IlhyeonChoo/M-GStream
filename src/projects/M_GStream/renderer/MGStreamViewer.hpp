@@ -15,17 +15,17 @@
 namespace sibr {
 	class RenderingSystem;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT ExtendedGaussianViewer : public sibr::MultiViewBase
+	class SIBR_MGSTREAM_EXPORT MGStreamViewer : public sibr::MultiViewBase
 	{
 	public:
-		SIBR_CLASS_PTR(ExtendedGaussianViewer);
+		SIBR_CLASS_PTR(MGStreamViewer);
 
 		/*
 		 * \brief Creates a MultiViewManager in a given OS window.
 		 * \param window The OS window to use.
 		 * \param resize Should the window be resized by the manager to maximize usable space.
 		 */
-		ExtendedGaussianViewer(sibr::Window& window, bool resize = true);
+		MGStreamViewer(sibr::Window& window, bool resize = true);
 
 		/**
 		 * \brief Update subviews and the MultiViewManager.

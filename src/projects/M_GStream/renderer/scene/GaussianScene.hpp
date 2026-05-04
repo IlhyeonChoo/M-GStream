@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 namespace sibr {
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianScene {
+	class SIBR_MGSTREAM_EXPORT GaussianScene {
 	public:
 		SIBR_CLASS_PTR(GaussianScene);
 

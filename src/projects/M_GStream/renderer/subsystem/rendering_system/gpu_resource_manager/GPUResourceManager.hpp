@@ -19,7 +19,7 @@ namespace sibr {
 		Failed
 	};
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GPUResourceManager {
+	class SIBR_MGSTREAM_EXPORT GPUResourceManager {
 	public:
 		SIBR_CLASS_PTR(GPUResourceManager);
 

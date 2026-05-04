@@ -1,4 +1,4 @@
-# Extended Gaussian 브랜치/커밋 규칙
+# MGStream 브랜치/커밋 규칙
 
 ## 목적
 

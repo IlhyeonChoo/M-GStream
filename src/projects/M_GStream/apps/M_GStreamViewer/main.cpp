@@ -7,9 +7,9 @@
 
 #include <core/graphics/Window.hpp>
 #include <core/system/CommandLineArgs.hpp>
-#include "projects/M_GStream/renderer/ExtendedGaussianViewer.hpp"
+#include "projects/M_GStream/renderer/MGStreamViewer.hpp"
 #include "projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.hpp"
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
 #include "projects/M_GStream/renderer/subsystem/rendering_system/SwapManager.hpp"
 #include "projects/M_GStream/renderer/server/CameraPoseAdapter.hpp"
 #include "projects/M_GStream/renderer/server/RemoteStreamServer.hpp"
@@ -32,7 +32,7 @@ bool shutdownRequested()
     return g_shutdown_requested != 0;
 }
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
 const char* loadContentSourceKindName(LoadContentSourceKind kind)
 {
     switch (kind) {
@@ -45,7 +45,7 @@ const char* loadContentSourceKindName(LoadContentSourceKind kind)
 }
 #endif
 
-struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
+struct MGStreamViewerAppArgs : virtual BasicIBRAppArgs {
     Arg<std::string> manifest = { "manifest", "", "path to a manifest json file" };
     Arg<bool> headless = { "headless", "run without a visible window; without --server it renders a finite snapshot and exits" };
     Arg<int> render_width = { "render-width", 1280, "offscreen render width for headless mode" };
@@ -53,7 +53,7 @@ struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
     Arg<std::string> snapshot = { "snapshot", "", "png file path for headless snapshot output" };
     Arg<bool> wait_for_streaming_idle = { "wait-for-streaming-idle", "wait until manifest streaming queues drain before capturing" };
     Arg<int> max_headless_frames = { "max-headless-frames", 600, "maximum number of frames to render in headless mode" };
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
     Arg<bool> server = { "server", "start the remote browser stream HTTP server" };
     Arg<std::string> listen_host = { "listen-host", "127.0.0.1", "HTTP listen host for remote browser streaming" };
     Arg<int> listen_port = { "listen-port", 8080, "HTTP listen port for remote browser streaming" };
@@ -66,8 +66,8 @@ struct ExtendedGaussianViewerAppArgs : virtual BasicIBRAppArgs {
 #endif
 };
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
-RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& viewer)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
+RendererHealthSnapshot makeRendererHealthSnapshot(const MGStreamViewer& viewer)
 {
     RendererHealthSnapshot snapshot;
     const RenderingSystem* rendering_system = viewer.getRenderingSystem();
@@ -113,7 +113,7 @@ RendererHealthSnapshot makeRendererHealthSnapshot(const ExtendedGaussianViewer& 
     return snapshot;
 }
 
-void updateServerHealth(RemoteStreamServer* server, const ExtendedGaussianViewer& viewer)
+void updateServerHealth(RemoteStreamServer* server, const MGStreamViewer& viewer)
 {
     if (!server) {
         return;
@@ -121,7 +121,7 @@ void updateServerHealth(RemoteStreamServer* server, const ExtendedGaussianViewer
     server->setRendererHealthSnapshot(makeRendererHealthSnapshot(viewer));
 }
 
-void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewer, uint64_t* visible_control_sequence)
+void pumpRemoteControl(RemoteStreamServer* server, MGStreamViewer& viewer, uint64_t* visible_control_sequence)
 {
     if (!server) {
         return;
@@ -176,9 +176,9 @@ void pumpRemoteControl(RemoteStreamServer* server, ExtendedGaussianViewer& viewe
 #endif
 
 int runInteractive(
-    ExtendedGaussianViewer& viewer,
+    MGStreamViewer& viewer,
     Window& window
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
     , RemoteStreamServer* server
 #endif
 )
@@ -197,11 +197,11 @@ int runInteractive(
         }
 
         viewer.onUpdate(Input::global());
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
         pumpRemoteControl(server, viewer, &visible_control_sequence);
 #endif
         viewer.onRender(window);
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
         if (server) {
             if (const RenderTargetRGB* stream_target = viewer.getGaussianViewRenderTarget()) {
                 server->submitRenderedFrame(*stream_target, viewer.getFrameIndex(), visible_control_sequence);
@@ -212,7 +212,7 @@ int runInteractive(
         viewer.onSwapBuffer(window);
     }
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
     if (server) {
         window.makeContextCurrent();
         server->releaseRenderThreadResources();
@@ -222,7 +222,7 @@ int runInteractive(
     return EXIT_SUCCESS;
 }
 
-int runHeadless(ExtendedGaussianViewer& viewer, Window& window, const ExtendedGaussianViewerAppArgs& args)
+int runHeadless(MGStreamViewer& viewer, Window& window, const MGStreamViewerAppArgs& args)
 {
     const std::string manifest_path = args.manifest.get();
     const std::string dataset_path = getCommandLineArgs().get<std::string>("path", "");
@@ -308,13 +308,13 @@ int main(int ac, char** av)
 #endif
 
     CommandLineArgs::parseMainArgs(ac, av);
-    ExtendedGaussianViewerAppArgs myArgs;
+    MGStreamViewerAppArgs myArgs;
     myArgs.displayHelpIfRequired();
     if (myArgs.showHelp.get()) {
         return EXIT_SUCCESS;
     }
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
     const ServerOptions server_options = ParseServerOptions(getCommandLineArgs());
     const bool server_enabled = server_options.enabled;
 #else
@@ -352,13 +352,13 @@ int main(int ac, char** av)
 
     std::unique_ptr<Window> window;
     if (myArgs.headless.get() || myArgs.offscreen.get()) {
-        window = std::make_unique<Window>("Extended Gaussian Viewer", myArgs);
+        window = std::make_unique<Window>("MGStream Viewer", myArgs);
     }
     else {
-        window = std::make_unique<Window>("Extended Gaussian Viewer", Vector2i(50, 50), myArgs);
+        window = std::make_unique<Window>("MGStream Viewer", Vector2i(50, 50), myArgs);
     }
 
-    ExtendedGaussianViewer viewer(*window, false);
+    MGStreamViewer viewer(*window, false);
 
     const std::string dataset_path = getCommandLineArgs().get<std::string>("path", "");
     const std::string manifest_path = myArgs.manifest.get();
@@ -377,7 +377,7 @@ int main(int ac, char** av)
         return runHeadless(viewer, *window, myArgs);
     }
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_REMOTE_STREAM_BUILD)
+#if defined(SIBR_MGSTREAM_REMOTE_STREAM_BUILD)
     std::unique_ptr<RemoteStreamServer> server;
     if (server_enabled) {
         server = std::make_unique<RemoteStreamServer>(server_options);

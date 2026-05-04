@@ -20,7 +20,7 @@ namespace sibr {
 		std::string error;
 	};
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT AssetLoadWorker {
+	class SIBR_MGSTREAM_EXPORT AssetLoadWorker {
 	public:
 		AssetLoadWorker() = default;
 		~AssetLoadWorker();

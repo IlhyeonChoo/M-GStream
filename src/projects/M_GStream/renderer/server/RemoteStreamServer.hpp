@@ -20,7 +20,7 @@ namespace sibr {
 
 class MjpegStreamer;
 
-struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT TimingStatsSummary {
+struct SIBR_MGSTREAM_SERVER_EXPORT TimingStatsSummary {
     uint64_t samples = 0;
     double average_ms = 0.0;
     double p50_ms = 0.0;
@@ -28,7 +28,7 @@ struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT TimingStatsSummary {
     double max_ms = 0.0;
 };
 
-struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RendererHealthSnapshot {
+struct SIBR_MGSTREAM_SERVER_EXPORT RendererHealthSnapshot {
     bool initialized = false;
     bool has_manifest = false;
     uint64_t frame_index = 0;
@@ -56,7 +56,7 @@ struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RendererHealthSnapshot {
     size_t swap_misses = 0;
 };
 
-struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerStats {
+struct SIBR_MGSTREAM_SERVER_EXPORT ServerStats {
     bool running = false;
     std::string listen_host;
     int listen_port = 0;
@@ -90,7 +90,7 @@ struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerStats {
     TimingStatsSummary control_receive_to_apply_ms;
 };
 
-class SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RemoteStreamServer {
+class SIBR_MGSTREAM_SERVER_EXPORT RemoteStreamServer {
 public:
     explicit RemoteStreamServer(ServerOptions options);
     ~RemoteStreamServer();

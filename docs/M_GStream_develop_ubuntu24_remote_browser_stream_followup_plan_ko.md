@@ -44,7 +44,7 @@
 이 문서에서 "지금 해도 된다"고 보는 작업은 아래 조건을 만족해야 한다.
 
 - 기존 hot path 파일을 건드리지 않는다.
-- `main.cpp`, `ExtendedGaussianViewer`, `RenderingSystem`, `GaussianView`를 수정하지 않는다.
+- `main.cpp`, `MGStreamViewer`, `RenderingSystem`, `GaussianView`를 수정하지 않는다.
 - 기존 CMake / install / packaging 경로를 되도록 건드리지 않는다.
 - 새 문서, 새 샘플, 새 픽스처, 새 독립 유틸 같은 **추가형 변경**으로 끝난다.
 - 후속 브랜치가 그대로 가져다 쓰거나 기준 문서로 참조할 수 있다.
@@ -222,7 +222,7 @@
 지금 여기서 선제적으로 수정하면,
 후속 브랜치의 실행 경로 변경과 쉽게 겹친다.
 
-### 6.2 `ExtendedGaussianViewer` / `RenderingSystem` / `GaussianView`와의 실제 연결
+### 6.2 `MGStreamViewer` / `RenderingSystem` / `GaussianView`와의 실제 연결
 
 #### 필요한 이유
 

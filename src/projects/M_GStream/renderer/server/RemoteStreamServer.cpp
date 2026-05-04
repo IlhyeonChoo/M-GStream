@@ -857,7 +857,7 @@ http::response<http::empty_body> makeHeadResponse(
 
 std::string jpegBackendName()
 {
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     return "TurboJPEG";
 #else
     return "OpenCV";
@@ -1585,7 +1585,7 @@ std::string RemoteStreamServer::resolveWwwRoot(std::string& error) const
     if (!options_.www_root.empty()) {
         candidates.emplace_back(options_.www_root);
     }
-    if (const char* env_root = std::getenv("EXTENDED_GAUSSIAN_WWW_ROOT")) {
+    if (const char* env_root = std::getenv("MGSTREAM_WWW_ROOT")) {
         if (env_root[0] != '\0') {
             candidates.emplace_back(env_root);
         }
@@ -1594,8 +1594,8 @@ std::string RemoteStreamServer::resolveWwwRoot(std::string& error) const
     const fs::path install_directory = fs::path(getInstallDirectory());
     candidates.emplace_back(install_directory / "resources" / "M_GStream" / "server" / "www");
     candidates.emplace_back(install_directory / "share" / "M_GStream" / "www");
-#ifdef SIBR_EXTENDED_GAUSSIAN_REMOTE_WWW_SOURCE_DIR
-    candidates.emplace_back(fs::path(SIBR_EXTENDED_GAUSSIAN_REMOTE_WWW_SOURCE_DIR));
+#ifdef SIBR_MGSTREAM_REMOTE_WWW_SOURCE_DIR
+    candidates.emplace_back(fs::path(SIBR_MGSTREAM_REMOTE_WWW_SOURCE_DIR));
 #endif
 
     for (const fs::path& candidate : candidates) {
@@ -1611,7 +1611,7 @@ std::string RemoteStreamServer::resolveWwwRoot(std::string& error) const
         }
     }
 
-    error = "Failed to locate remote stream www root. Use --www-root <path> or EXTENDED_GAUSSIAN_WWW_ROOT.";
+    error = "Failed to locate remote stream www root. Use --www-root <path> or MGSTREAM_WWW_ROOT.";
     return {};
 }
 

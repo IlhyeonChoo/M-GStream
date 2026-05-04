@@ -35,10 +35,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     sibr_system
 )
 target_compile_definitions(${PROJECT_NAME} PUBLIC
-    SIBR_EXTENDED_GAUSSIAN_SERVER_STATIC_DEFINE
+    SIBR_MGSTREAM_SERVER_STATIC_DEFINE
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    SIBR_EXTENDED_GAUSSIAN_REMOTE_WWW_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/www"
+    SIBR_MGSTREAM_REMOTE_WWW_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/www"
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -51,7 +51,7 @@ message(STATUS "M_GStream_server HTTP/WebSocket backend: Boost.Beast")
 
 if(TARGET TurboJPEG::TurboJPEG)
     target_link_libraries(${PROJECT_NAME} PRIVATE TurboJPEG::TurboJPEG)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE=1)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SIBR_MGSTREAM_TURBOJPEG_AVAILABLE=1)
     message(STATUS "M_GStream_server JPEG backend: TurboJPEG enabled")
 else()
     message(WARNING "M_GStream_server JPEG backend: TurboJPEG not found. Falling back to OpenCV JPEG encoding for M5.")

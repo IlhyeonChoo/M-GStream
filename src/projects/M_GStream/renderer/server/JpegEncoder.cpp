@@ -10,14 +10,14 @@
 #include <utility>
 #include <vector>
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
 #include <turbojpeg.h>
 #endif
 
 namespace sibr {
 
 struct JpegEncoder::Impl {
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     tjhandle turbo_handle = nullptr;
 #endif
 };
@@ -25,14 +25,14 @@ struct JpegEncoder::Impl {
 JpegEncoder::JpegEncoder(int quality)
     : quality_(std::clamp(quality, 1, 100)), impl_(std::make_unique<Impl>())
 {
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     impl_->turbo_handle = tjInitCompress();
 #endif
 }
 
 JpegEncoder::~JpegEncoder()
 {
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     if (impl_ && impl_->turbo_handle != nullptr) {
         tjDestroy(impl_->turbo_handle);
         impl_->turbo_handle = nullptr;
@@ -42,7 +42,7 @@ JpegEncoder::~JpegEncoder()
 
 std::string JpegEncoder::backendName() const
 {
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     if (impl_ && impl_->turbo_handle != nullptr) {
         return "TurboJPEG";
     }
@@ -65,7 +65,7 @@ bool JpegEncoder::encodeRgb(
         return false;
     }
 
-#if defined(SIBR_EXTENDED_GAUSSIAN_TURBOJPEG_AVAILABLE)
+#if defined(SIBR_MGSTREAM_TURBOJPEG_AVAILABLE)
     if (impl_ && impl_->turbo_handle != nullptr) {
         unsigned char* encoded_buffer = nullptr;
         unsigned long encoded_size = 0;

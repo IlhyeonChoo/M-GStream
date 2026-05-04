@@ -8,8 +8,8 @@
 
 namespace sibr {
 
-	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT bool ValidateRemoteCameraPose(const RemoteCameraPose& pose, std::string& error);
-	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT bool TryBuildInputCamera(const RemoteCameraPose& pose, sibr::InputCamera& camera, std::string& error);
-	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RemoteCameraPose ExportRemoteCameraPose(const sibr::InputCamera& camera);
+	SIBR_MGSTREAM_SERVER_EXPORT bool ValidateRemoteCameraPose(const RemoteCameraPose& pose, std::string& error);
+	SIBR_MGSTREAM_SERVER_EXPORT bool TryBuildInputCamera(const RemoteCameraPose& pose, sibr::InputCamera& camera, std::string& error);
+	SIBR_MGSTREAM_SERVER_EXPORT RemoteCameraPose ExportRemoteCameraPose(const sibr::InputCamera& camera);
 
 } // namespace sibr

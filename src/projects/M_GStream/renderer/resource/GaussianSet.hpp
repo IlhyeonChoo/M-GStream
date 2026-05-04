@@ -5,7 +5,7 @@
 #include "Config.hpp"
 
 namespace sibr {
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianSet {
+	class SIBR_MGSTREAM_EXPORT GaussianSet {
 	public:
 		SIBR_CLASS_PTR(GaussianSet);
 

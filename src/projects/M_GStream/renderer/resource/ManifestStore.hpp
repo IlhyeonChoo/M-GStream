@@ -68,7 +68,7 @@ namespace sibr {
 		std::vector<std::string> warm_by_tag;
 	};
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT ManifestStore {
+	class SIBR_MGSTREAM_EXPORT ManifestStore {
 	public:
 		static ManifestProbeResult probe(const boost::filesystem::path& manifestPath);
 		bool load(const boost::filesystem::path& manifestPath);

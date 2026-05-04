@@ -639,7 +639,7 @@ src/projects/M_GStream/renderer/subsystem/streaming_system/
 
 ```mermaid
 sequenceDiagram
-    participant Viewer as ExtendedGaussianViewer
+    participant Viewer as MGStreamViewer
     participant Stream as StreamingSystem
     participant Policy as SwapPolicy
     participant Registry as AssetRegistry

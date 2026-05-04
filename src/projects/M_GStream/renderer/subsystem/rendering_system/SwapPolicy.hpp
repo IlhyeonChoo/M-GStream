@@ -31,7 +31,7 @@ namespace sibr {
 		std::unordered_set<AssetId> protected_assets;
 	};
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT SwapPolicy {
+	class SIBR_MGSTREAM_EXPORT SwapPolicy {
 	public:
 		PolicyResult evaluate(const ViewerContext& context, const ManifestStore& manifest, const ResourceManager& registry) const;
 	};

@@ -1,7 +1,7 @@
 #include "RenderingSystem.hpp"
 
 #include "RenderUtils.hpp"
-#include <projects/M_GStream/renderer/ExtendedGaussianViewer.hpp>
+#include <projects/M_GStream/renderer/MGStreamViewer.hpp>
 
 namespace sibr {
 	RenderingSystem::RenderingSystem()
@@ -29,11 +29,11 @@ namespace sibr {
 			SIBR_ERR << "Unsupported CUDA device: compute capability "
 				<< prop.major << "." << prop.minor << " detected (" << prop.name << "). "
 				<< "This portable bundle requires SM 7.5 (Turing) or newer. "
-				<< "Rebuild from source with -DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES including your device architecture to use older GPUs.";
+				<< "Rebuild from source with -DMGSTREAM_CUDA_ARCHITECTURES including your device architecture to use older GPUs.";
 		}
 	}
 
-	void RenderingSystem::onSystemAdded(ExtendedGaussianViewer& owner)
+	void RenderingSystem::onSystemAdded(MGStreamViewer& owner)
 	{
 		resources = owner.getResourceManager();
 		swapManager = std::make_unique<SwapManager>(*resources, GPUResourceManager::getInstance());
@@ -70,7 +70,7 @@ namespace sibr {
 		scene = std::make_unique<RenderGaussianScene>();
 	}
 
-	void RenderingSystem::onSystemRemoved(ExtendedGaussianViewer& owner)
+	void RenderingSystem::onSystemRemoved(MGStreamViewer& owner)
 	{
 	}
 

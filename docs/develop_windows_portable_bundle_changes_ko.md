@@ -88,7 +88,7 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 - `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.{hpp,cpp}`
 - `src/projects/M_GStream/renderer/subsystem/rendering_system/gpu_resource_manager/GPUResourceManager.{hpp,cpp}`
 - `src/projects/M_GStream/renderer/scene/GaussianInstance.{hpp,cpp}`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.{hpp,cpp}`
+- `src/projects/M_GStream/renderer/MGStreamViewer.{hpp,cpp}`
 
 ### 4.3 Windows install / portable bundle 정리
 
@@ -188,8 +188,8 @@ Phase 1 swap 흐름을 받치기 위해 CPU/GPU asset ownership과 렌더 경로
 - `plan/2026-04-08-windows-portable-bundle-review-followups.md`
 - `plan/2026-04-08-windows-portable-bundle.md`
 - `src/projects/M_GStream/apps/M_GStreamViewer/CMakeLists.txt`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.hpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.cpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.hpp`
 - `src/projects/M_GStream/renderer/resource/AssetLoadWorker.cpp`
 - `src/projects/M_GStream/renderer/resource/AssetLoadWorker.hpp`
 - `src/projects/M_GStream/renderer/resource/GaussianLoader.cpp`

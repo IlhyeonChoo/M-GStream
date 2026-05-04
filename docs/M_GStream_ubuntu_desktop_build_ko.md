@@ -1,4 +1,4 @@
-# Extended Gaussian Ubuntu Desktop Build Guide
+# MGStream Ubuntu Desktop Build Guide
 
 대상: Ubuntu desktop에서 Ninja로 `M_GStreamViewer_app`을 빌드하고 실행하려는 작업자.
 

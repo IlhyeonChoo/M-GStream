@@ -1,5 +1,5 @@
 
-#include "ExtendedGaussianViewer.hpp"
+#include "MGStreamViewer.hpp"
 #include <projects/M_GStream/renderer/resource/GaussianLoader.hpp>
 #include <projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.hpp>
 
@@ -13,7 +13,7 @@
 #include <sstream>
 
 namespace sibr {
-	ExtendedGaussianViewer::ExtendedGaussianViewer(Window& window, bool resize)
+	MGStreamViewer::MGStreamViewer(Window& window, bool resize)
 		: _window(window), _fpsCounter(false)
 	{
 		_enableGUI = window.isGUIEnabled();
@@ -50,7 +50,7 @@ namespace sibr {
 		}
 	}
 
-	void ExtendedGaussianViewer::onUpdate(Input& input)
+	void MGStreamViewer::onUpdate(Input& input)
 	{
 		MultiViewBase::onUpdate(input);
 		_appTimeSec += deltaTime();
@@ -60,7 +60,7 @@ namespace sibr {
 		}
 	}
 
-	void ExtendedGaussianViewer::onRender(Window& win)
+	void MGStreamViewer::onRender(Window& win)
 	{
 		win.viewport().bind();
 		glClearColor(37.f / 255.f, 37.f / 255.f, 38.f / 255.f, 1.f);
@@ -93,7 +93,7 @@ namespace sibr {
 		_fpsCounter.update(_enableGUI && _showGUI);
 	}
 
-	void ExtendedGaussianViewer::onGui(Window& win)
+	void MGStreamViewer::onGui(Window& win)
 	{
 		if (!_enableGUI) {
 			return;
@@ -277,43 +277,43 @@ namespace sibr {
 		}
 	}
 
-	void ExtendedGaussianViewer::onSwapBuffer(sibr::Window& win)
+	void MGStreamViewer::onSwapBuffer(sibr::Window& win)
 	{
 		win.swapBuffer();
 	}
 
-	Vector2i ExtendedGaussianViewer::getWindowSize() const
+	Vector2i MGStreamViewer::getWindowSize() const
 	{
 		return _window.size();
 	}
 
-	const GaussianScene* ExtendedGaussianViewer::getScene() const {
+	const GaussianScene* MGStreamViewer::getScene() const {
 		return _scene.get();
 	}
 
-	GaussianScene* ExtendedGaussianViewer::getScene() {
+	GaussianScene* MGStreamViewer::getScene() {
 		return _scene.get();
 	}
 
-	ResourceManager* ExtendedGaussianViewer::getResourceManager() {
+	ResourceManager* MGStreamViewer::getResourceManager() {
 		return _resourceManager.get();
 	}
 
-	const ResourceManager* ExtendedGaussianViewer::getResourceManager() const {
+	const ResourceManager* MGStreamViewer::getResourceManager() const {
 		return _resourceManager.get();
 	}
 
-	RenderingSystem* ExtendedGaussianViewer::getRenderingSystem()
+	RenderingSystem* MGStreamViewer::getRenderingSystem()
 	{
 		return static_cast<RenderingSystem*>(_subsystem[RENDERING_SYSTEM].get());
 	}
 
-	const RenderingSystem* ExtendedGaussianViewer::getRenderingSystem() const
+	const RenderingSystem* MGStreamViewer::getRenderingSystem() const
 	{
 		return static_cast<const RenderingSystem*>(_subsystem[RENDERING_SYSTEM].get());
 	}
 
-	bool ExtendedGaussianViewer::loadModelDirectoryAsInstance(const std::string& modelPath)
+	bool MGStreamViewer::loadModelDirectoryAsInstance(const std::string& modelPath)
 	{
 		if (modelPath.empty() || !_scene || !_resourceManager) {
 			return false;
@@ -388,7 +388,7 @@ namespace sibr {
 		return true;
 	}
 
-	bool ExtendedGaussianViewer::replaceWithModelDirectory(const std::string& modelPath, std::string& error, uint64_t loadSequence)
+	bool MGStreamViewer::replaceWithModelDirectory(const std::string& modelPath, std::string& error, uint64_t loadSequence)
 	{
 		beginContentLoad("model_dir", modelPath, loadSequence);
 		if (!resetCurrentContent(error)) {
@@ -405,7 +405,7 @@ namespace sibr {
 		return true;
 	}
 
-	bool ExtendedGaussianViewer::replaceWithManifestFile(const std::string& path, std::string& error, uint64_t loadSequence)
+	bool MGStreamViewer::replaceWithManifestFile(const std::string& path, std::string& error, uint64_t loadSequence)
 	{
 		beginContentLoad("manifest", path, loadSequence);
 		if (!resetCurrentContent(error)) {
@@ -421,7 +421,7 @@ namespace sibr {
 		return true;
 	}
 
-	bool ExtendedGaussianViewer::captureGaussianViewSnapshot(const std::string& snapshotPath)
+	bool MGStreamViewer::captureGaussianViewSnapshot(const std::string& snapshotPath)
 	{
 		if (snapshotPath.empty()) {
 			return false;
@@ -447,7 +447,7 @@ namespace sibr {
 		return boost::filesystem::exists(boost::filesystem::path(directory) / fileName);
 	}
 
-	bool ExtendedGaussianViewer::tryGetGaussianViewCamera(sibr::InputCamera& camera, std::string& error) const
+	bool MGStreamViewer::tryGetGaussianViewCamera(sibr::InputCamera& camera, std::string& error) const
 	{
 		const auto viewIt = _ibrSubViews.find("Gaussian View");
 		if (viewIt == _ibrSubViews.end()) {
@@ -464,7 +464,7 @@ namespace sibr {
 		return true;
 	}
 
-	bool ExtendedGaussianViewer::applyGaussianViewCamera(const sibr::InputCamera& camera, std::string& error)
+	bool MGStreamViewer::applyGaussianViewCamera(const sibr::InputCamera& camera, std::string& error)
 	{
 		auto viewIt = _ibrSubViews.find("Gaussian View");
 		if (viewIt == _ibrSubViews.end()) {
@@ -482,7 +482,7 @@ namespace sibr {
 		return true;
 	}
 
-	const RenderTargetRGB* ExtendedGaussianViewer::getGaussianViewRenderTarget() const
+	const RenderTargetRGB* MGStreamViewer::getGaussianViewRenderTarget() const
 	{
 		const auto viewIt = _ibrSubViews.find("Gaussian View");
 		if (viewIt == _ibrSubViews.end() || !viewIt->second.rt) {
@@ -491,7 +491,7 @@ namespace sibr {
 		return viewIt->second.rt.get();
 	}
 
-	bool ExtendedGaussianViewer::isStreamingIdle() const
+	bool MGStreamViewer::isStreamingIdle() const
 	{
 		const RenderingSystem* renderingSystem = getRenderingSystem();
 		if (!renderingSystem || !renderingSystem->hasManifest()) {
@@ -509,67 +509,67 @@ namespace sibr {
 			&& stats->skipped_instances_last_frame == 0;
 	}
 
-	double ExtendedGaussianViewer::getAppTimeSeconds() const
+	double MGStreamViewer::getAppTimeSeconds() const
 	{
 		return _appTimeSec;
 	}
 
-	uint64_t ExtendedGaussianViewer::getFrameIndex() const
+	uint64_t MGStreamViewer::getFrameIndex() const
 	{
 		return _frameIndex;
 	}
 
-	const std::string& ExtendedGaussianViewer::getCurrentPhase() const
+	const std::string& MGStreamViewer::getCurrentPhase() const
 	{
 		return _currentPhase;
 	}
 
-	void ExtendedGaussianViewer::setCurrentPhase(const std::string& phase)
+	void MGStreamViewer::setCurrentPhase(const std::string& phase)
 	{
 		_currentPhase = phase;
 	}
 
-	std::vector<std::string> ExtendedGaussianViewer::getAvailablePhases() const
+	std::vector<std::string> MGStreamViewer::getAvailablePhases() const
 	{
 		return _manifestStore.phases();
 	}
 
-	size_t ExtendedGaussianViewer::getManifestAssetCount() const
+	size_t MGStreamViewer::getManifestAssetCount() const
 	{
 		return _manifestStore.assets().size();
 	}
 
-	bool ExtendedGaussianViewer::hasLoadedContent() const
+	bool MGStreamViewer::hasLoadedContent() const
 	{
 		return _loadState == contentLoadStateLabel(ContentLoadState::Loaded) && !_loadedContentPath.empty();
 	}
 
-	const std::string& ExtendedGaussianViewer::getLoadedContentKind() const
+	const std::string& MGStreamViewer::getLoadedContentKind() const
 	{
 		return _loadedContentKind;
 	}
 
-	const std::string& ExtendedGaussianViewer::getLoadedContentPath() const
+	const std::string& MGStreamViewer::getLoadedContentPath() const
 	{
 		return _loadedContentPath;
 	}
 
-	const std::string& ExtendedGaussianViewer::getLoadState() const
+	const std::string& MGStreamViewer::getLoadState() const
 	{
 		return _loadState;
 	}
 
-	const std::string& ExtendedGaussianViewer::getLastLoadError() const
+	const std::string& MGStreamViewer::getLastLoadError() const
 	{
 		return _lastLoadError;
 	}
 
-	uint64_t ExtendedGaussianViewer::getLastLoadSequence() const
+	uint64_t MGStreamViewer::getLastLoadSequence() const
 	{
 		return _lastLoadSequence;
 	}
 
-	bool ExtendedGaussianViewer::resetCurrentContent(std::string& error)
+	bool MGStreamViewer::resetCurrentContent(std::string& error)
 	{
 		error.clear();
 		if (auto* renderingSystem = getRenderingSystem()) {
@@ -609,7 +609,7 @@ namespace sibr {
 		return true;
 	}
 
-	void ExtendedGaussianViewer::beginContentLoad(const std::string& kind, const std::string& path, uint64_t loadSequence)
+	void MGStreamViewer::beginContentLoad(const std::string& kind, const std::string& path, uint64_t loadSequence)
 	{
 		_loadedContentKind = kind;
 		_loadedContentPath = path;
@@ -618,7 +618,7 @@ namespace sibr {
 		_lastLoadSequence = loadSequence;
 	}
 
-	void ExtendedGaussianViewer::finishContentLoad(
+	void MGStreamViewer::finishContentLoad(
 		const std::string& kind,
 		const std::string& path,
 		uint64_t loadSequence,
@@ -632,7 +632,7 @@ namespace sibr {
 		_lastLoadSequence = loadSequence;
 	}
 
-	const char* ExtendedGaussianViewer::contentLoadStateLabel(ContentLoadState state)
+	const char* MGStreamViewer::contentLoadStateLabel(ContentLoadState state)
 	{
 		switch (state) {
 		case ContentLoadState::Idle: return "idle";
@@ -643,7 +643,7 @@ namespace sibr {
 		return "unknown";
 	}
 
-	bool ExtendedGaussianViewer::loadManifestFile(const std::string& path, std::string& error)
+	bool MGStreamViewer::loadManifestFile(const std::string& path, std::string& error)
 	{
 		if (!_manifestStore.load(path)) {
 			error = "Failed to load manifest: " + path;
@@ -679,7 +679,7 @@ namespace sibr {
 		return true;
 	}
 
-	size_t ExtendedGaussianViewer::createManifestInstances(bool onlyMissing)
+	size_t MGStreamViewer::createManifestInstances(bool onlyMissing)
 	{
 		if (_manifestStore.empty() || !_scene) {
 			return 0;
@@ -726,7 +726,7 @@ namespace sibr {
 		return createdCount;
 	}
 
-	void ExtendedGaussianViewer::focusCameraOnManifest()
+	void MGStreamViewer::focusCameraOnManifest()
 	{
 		if (_manifestStore.empty()) {
 			return;
@@ -754,7 +754,7 @@ namespace sibr {
 		focusCameraOnBounds(minBounds, maxBounds);
 	}
 
-	void ExtendedGaussianViewer::focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds)
+	void MGStreamViewer::focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds)
 	{
 		const auto viewIt = _ibrSubViews.find("Gaussian View");
 		if (viewIt == _ibrSubViews.end()) {
@@ -788,7 +788,7 @@ namespace sibr {
 		viewIt->second.cam = focusCamera;
 	}
 
-	const char* ExtendedGaussianViewer::cpuStateLabel(CpuState state)
+	const char* MGStreamViewer::cpuStateLabel(CpuState state)
 	{
 		switch (state) {
 		case CpuState::Loading: return "Loading";
@@ -800,7 +800,7 @@ namespace sibr {
 		}
 	}
 
-	const char* ExtendedGaussianViewer::gpuStateLabel(GpuState state)
+	const char* MGStreamViewer::gpuStateLabel(GpuState state)
 	{
 		switch (state) {
 		case GpuState::UploadQueued: return "Uploading";
@@ -812,14 +812,14 @@ namespace sibr {
 		}
 	}
 
-	std::string ExtendedGaussianViewer::formatMegabytes(size_t bytes)
+	std::string MGStreamViewer::formatMegabytes(size_t bytes)
 	{
 		std::ostringstream stream;
 		stream << std::fixed << std::setprecision(1) << (static_cast<double>(bytes) / (1024.0 * 1024.0));
 		return stream.str();
 	}
 
-	void ExtendedGaussianViewer::onShowScenePanel(Window& win) {
+	void MGStreamViewer::onShowScenePanel(Window& win) {
 		float sideWidth = 350.0f;
 		ImGui::SetNextWindowPos(ImVec2(win.size().x() - sideWidth, 20.0f), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(sideWidth, win.size().y() - 20.0f), ImGuiCond_FirstUseEver);
@@ -1007,7 +1007,7 @@ namespace sibr {
 		ImGui::End();
 	}
 
-	void ExtendedGaussianViewer::onShowResourceBrowser(Window& win) {
+	void MGStreamViewer::onShowResourceBrowser(Window& win) {
 		float browserHeight = 220.0f;
 		float sideWidth = 350.0f;
 		ImGui::SetNextWindowPos(ImVec2(0, win.size().y() - browserHeight), ImGuiCond_FirstUseEver);
@@ -1141,7 +1141,7 @@ namespace sibr {
 		ImGui::End();
 	}
 
-	void ExtendedGaussianViewer::toggleGUI()
+	void MGStreamViewer::toggleGUI()
 	{
 		_showGUI = !_showGUI;
 		if (!_showGUI) {

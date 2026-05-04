@@ -8,7 +8,7 @@
 #include <string>
 
 namespace sibr {
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT GaussianInstance {
+	class SIBR_MGSTREAM_EXPORT GaussianInstance {
 	public:
 		SIBR_CLASS_PTR(GaussianInstance);
 

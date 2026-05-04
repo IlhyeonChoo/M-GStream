@@ -8,7 +8,7 @@ namespace sibr {
 	class GaussianInstance;
 	class GaussianField;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT RenderGaussianInstance {
+	class SIBR_MGSTREAM_EXPORT RenderGaussianInstance {
 	public:
 		SIBR_CLASS_PTR(RenderGaussianInstance);
 

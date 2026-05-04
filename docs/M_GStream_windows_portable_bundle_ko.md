@@ -1,4 +1,4 @@
-# Extended Gaussian Windows 설치 번들 가이드
+# MGStream Windows 설치 번들 가이드
 
 작성일: 2026-04-08
 대상 브랜치: `develop/windows-portable-bundle`
@@ -45,7 +45,7 @@
 저장소 루트에서 다음 순서로 진행한다.
 
 ```powershell
-cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake -S . -B build-portable -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=75-real;86-real;89-real;120'
+cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && cmake -S . -B build-portable -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMGSTREAM_CUDA_ARCHITECTURES=75-real;86-real;89-real;120'
 ```
 
 ```powershell
@@ -117,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\build_windows_portable_
 
 `-IncludeSwaptestData`는 로컬 `swaptest/`를 번들 안에 같이 복사한다.
 
-기존 build tree가 예전에 `CMAKE_CUDA_ARCHITECTURES=52` 같은 값으로 configure되어 있었다면, 이 스크립트는 install/package 전에 중단된다. 이 경우 한 번 다시 configure해서 `EXTENDED_GAUSSIAN_CUDA_ARCHITECTURES=75-real;86-real;89-real;120`을 cache에 반영한 뒤 재실행한다.
+기존 build tree가 예전에 `CMAKE_CUDA_ARCHITECTURES=52` 같은 값으로 configure되어 있었다면, 이 스크립트는 install/package 전에 중단된다. 이 경우 한 번 다시 configure해서 `MGSTREAM_CUDA_ARCHITECTURES=75-real;86-real;89-real;120`을 cache에 반영한 뒤 재실행한다.
 
 ### 4.1 가장 짧은 배포 실험 절차
 

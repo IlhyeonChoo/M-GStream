@@ -36,7 +36,7 @@
 
 - 실제 HTTP / MJPEG / WebSocket 서버 구현
 - headless EGL 경로
-- `main.cpp`, `ExtendedGaussianViewer`, `RenderingSystem`, `GaussianView` 연결
+- `main.cpp`, `MGStreamViewer`, `RenderingSystem`, `GaussianView` 연결
 - OOM 이슈 수정
 
 ## 리뷰 결과 요약

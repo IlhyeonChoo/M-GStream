@@ -54,7 +54,7 @@ namespace sibr {
 	// All public methods are thread-safe; they acquire mutex_ internally.
 	// The sole exception is the private static estimateCpuBytes(), which is
 	// stateless and operates only on its argument.
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT ResourceManager {
+	class SIBR_MGSTREAM_EXPORT ResourceManager {
 	public:
 		SIBR_CLASS_PTR(ResourceManager);
 

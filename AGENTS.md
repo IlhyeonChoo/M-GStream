@@ -60,7 +60,7 @@ Visual Studio 쪽은 `build/sibr_projects.sln` 을 열어 `ALL_BUILD` → `INSTA
 ```text
 main
  -> create Window
- -> create ExtendedGaussianViewer
+ -> create MGStreamViewer
     -> create GaussianScene
     -> create ResourceManager
     -> create RenderingSystem
@@ -85,7 +85,7 @@ main
 렌더링 버그를 추적할 때 진입 순서:
 
 1. `src/projects/M_GStream/apps/M_GStreamViewer/main.cpp`
-2. `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+2. `src/projects/M_GStream/renderer/MGStreamViewer.cpp`
 3. `src/projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.cpp`
 4. `src/core/view/MultiViewManager.cpp`
 5. `src/core/view/RenderingMode.cpp`
@@ -167,7 +167,7 @@ UI "Create New Instance"
 
 | 바꾸려는 것 | 편집 대상 |
 |---|---|
-| 시작 시점 / 최상위 UI | `ExtendedGaussianViewer.{hpp,cpp}` |
+| 시작 시점 / 최상위 UI | `MGStreamViewer.{hpp,cpp}` |
 | 임포트 동작, 모델 디렉터리 규칙 | `GaussianLoader.{hpp,cpp}` |
 | 에셋 이름, 중복 처리, CPU 에셋 레지스트리 | `ResourceManager.{hpp,cpp}` |
 | 씬 객체 동작 | `GaussianInstance.*`, `GaussianScene.*` |
@@ -182,7 +182,7 @@ UI "Create New Instance"
 
 ### Entry / App Shell
 - `apps/M_GStreamViewer/main.cpp`
-- `renderer/ExtendedGaussianViewer.{hpp,cpp}`
+- `renderer/MGStreamViewer.{hpp,cpp}`
 
 ### CPU Asset / Scene
 - `renderer/resource/` — CPU 에셋 레이어 (`GaussianField`, `GaussianLoader`, `ResourceManager`)

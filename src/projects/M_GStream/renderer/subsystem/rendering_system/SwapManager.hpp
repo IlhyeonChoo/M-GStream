@@ -13,7 +13,7 @@
 #include <unordered_map>
 
 namespace sibr {
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT SwapManager {
+	class SIBR_MGSTREAM_EXPORT SwapManager {
 	public:
 		SIBR_CLASS_PTR(SwapManager);
 

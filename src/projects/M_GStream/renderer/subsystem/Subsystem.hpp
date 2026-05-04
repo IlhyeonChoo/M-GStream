@@ -11,16 +11,16 @@ namespace sibr {
 		SUBSYSTEM_LAST
 	};
 
-	class ExtendedGaussianViewer;
+	class MGStreamViewer;
 	class GaussianInstance;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT Subsystem {
+	class SIBR_MGSTREAM_EXPORT Subsystem {
 	public:
 		SIBR_CLASS_PTR(Subsystem);
 
-		virtual void onSystemAdded(ExtendedGaussianViewer& owner) = 0;
+		virtual void onSystemAdded(MGStreamViewer& owner) = 0;
 
-		virtual void onSystemRemoved(ExtendedGaussianViewer& owner) = 0;
+		virtual void onSystemRemoved(MGStreamViewer& owner) = 0;
 
 		virtual void onInstanceCreated(GaussianInstance& instance) {}
 

@@ -9,7 +9,7 @@
 
 namespace sibr {
 
-	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerOptions {
+	struct SIBR_MGSTREAM_SERVER_EXPORT ServerOptions {
 		bool enabled = false;
 		std::string listen_host = "127.0.0.1";
 		int listen_port = 8080;
@@ -19,7 +19,7 @@ namespace sibr {
 		std::string www_root;
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT RemoteCameraPose {
+	struct SIBR_MGSTREAM_SERVER_EXPORT RemoteCameraPose {
 		Vector3f position = Vector3f::Zero();
 		Vector3f forward = Vector3f(0.0f, 0.0f, -1.0f);
 		Vector3f up = Vector3f(0.0f, 1.0f, 0.0f);
@@ -37,7 +37,7 @@ namespace sibr {
 		Manifest
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ControlMessage {
+	struct SIBR_MGSTREAM_SERVER_EXPORT ControlMessage {
 		ControlMessageType type = ControlMessageType::SetCameraPose;
 		RemoteCameraPose camera_pose;
 		std::string phase;
@@ -45,7 +45,7 @@ namespace sibr {
 		std::string path;
 	};
 
-	struct SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ParseControlMessageResult {
+	struct SIBR_MGSTREAM_SERVER_EXPORT ParseControlMessageResult {
 		bool ok = false;
 		ControlMessage message;
 		std::string error;
@@ -56,7 +56,7 @@ namespace sibr {
 		}
 	};
 
-	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ServerOptions ParseServerOptions(const CommandLineArgs& args);
-	SIBR_EXTENDED_GAUSSIAN_SERVER_EXPORT ParseControlMessageResult ParseControlMessageJson(const std::string& payload);
+	SIBR_MGSTREAM_SERVER_EXPORT ServerOptions ParseServerOptions(const CommandLineArgs& args);
+	SIBR_MGSTREAM_SERVER_EXPORT ParseControlMessageResult ParseControlMessageJson(const std::string& payload);
 
 } // namespace sibr

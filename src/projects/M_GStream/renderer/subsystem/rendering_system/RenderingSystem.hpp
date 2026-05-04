@@ -12,20 +12,20 @@
 
 namespace sibr
 {
-	class ExtendedGaussianViewer;
+	class MGStreamViewer;
 	class ResourceManager;
 	class ManifestStore;
 
-	class SIBR_EXTENDED_GAUSSIAN_EXPORT RenderingSystem : public Subsystem
+	class SIBR_MGSTREAM_EXPORT RenderingSystem : public Subsystem
 	{
 	public:
 		SIBR_CLASS_PTR(RenderingSystem);
 
 		RenderingSystem();
 
-		void onSystemAdded(ExtendedGaussianViewer& owner) override;
+		void onSystemAdded(MGStreamViewer& owner) override;
 
-		void onSystemRemoved(ExtendedGaussianViewer& owner) override;
+		void onSystemRemoved(MGStreamViewer& owner) override;
 
 		void onInstanceCreated(GaussianInstance& instance) override;
 

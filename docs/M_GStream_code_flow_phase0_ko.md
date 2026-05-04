@@ -1,4 +1,4 @@
-# Extended Gaussian 프로젝트 분석과 코드 실행 흐름 (Phase 0 기준)
+# MGStream 프로젝트 분석과 코드 실행 흐름 (Phase 0 기준)
 
 ## 관련 문서
 
@@ -88,7 +88,7 @@
 ```text
 main
  -> Window 생성
- -> ExtendedGaussianViewer 생성
+ -> MGStreamViewer 생성
     -> GaussianScene 생성
     -> ResourceManager 생성
     -> RenderingSystem 생성
@@ -125,7 +125,7 @@ main
 
 - 커맨드라인 인자를 파싱한다.
 - `sibr::Window`를 만든다.
-- `ExtendedGaussianViewer`를 만든다.
+- `MGStreamViewer`를 만든다.
 - OS 창이 열려 있는 동안 입력, 업데이트, 렌더, 버퍼 스왑을 반복한다.
 
 핵심 흐름:
@@ -134,9 +134,9 @@ main
    - SIBR 공용 인자 파서 호출.
 2. `BasicIBRAppArgs myArgs`
    - 윈도우/앱 관련 기본 설정 컨테이너를 준비한다.
-3. `Window window("Extended Gaussian Viewer", ...)`
+3. `Window window("MGStream Viewer", ...)`
    - 실제 OS 창과 OpenGL context를 만든다.
-4. `ExtendedGaussianViewer viewer(window, false)`
+4. `MGStreamViewer viewer(window, false)`
    - 프로젝트 전용 뷰어를 구성한다.
 5. 메인 루프
    - `Input::poll()`
@@ -148,12 +148,12 @@ main
 
 즉 `main.cpp`는 로직을 거의 가지지 않고, **뷰어 객체에 모든 프레임 책임을 위임하는 얇은 엔트리 포인트**다.
 
-### 5.2 `ExtendedGaussianViewer`: 프로젝트 전용 앱 셸
+### 5.2 `MGStreamViewer`: 프로젝트 전용 앱 셸
 
 파일:
 
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.hpp`
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.cpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.hpp`
+- `src/projects/M_GStream/renderer/MGStreamViewer.cpp`
 
 이 클래스는 SIBR의 `MultiViewBase`를 상속한 뒤, M_GStream 프로젝트에 필요한 자원과 UI를 올린 앱 셸이다.
 
@@ -213,7 +213,7 @@ main
 
 즉 프로그램 시작 시점에 **CUDA 실행 가능 환경 검증**을 먼저 한다.
 
-`onSystemAdded(ExtendedGaussianViewer&)`에서 하는 일:
+`onSystemAdded(MGStreamViewer&)`에서 하는 일:
 
 1. 윈도우 크기를 읽어 `GaussianView` 생성
 2. ImGui subview 플래그 구성
@@ -264,7 +264,7 @@ main
 호출 흐름:
 
 ```text
-ExtendedGaussianViewer::onShowResourceBrowser
+MGStreamViewer::onShowResourceBrowser
  -> GaussianLoader::load(path)
  -> ResourceManager::addField(...)
 ```
@@ -381,7 +381,7 @@ ExtendedGaussianViewer::onShowResourceBrowser
 호출 흐름:
 
 ```text
-ExtendedGaussianViewer::onShowScenePanel
+MGStreamViewer::onShowScenePanel
  -> GaussianScene::createInstance(...)
  -> RenderingSystem::onInstanceCreated(...)
  -> RenderGaussianScene::createInstance(...)
@@ -534,7 +534,7 @@ ExtendedGaussianViewer::onShowScenePanel
 
 ```text
 main loop
- -> ExtendedGaussianViewer::onRender
+ -> MGStreamViewer::onRender
  -> MultiViewBase::onRender
  -> renderSubView(IBRSubView)
  -> IBRSubView::render
@@ -550,7 +550,7 @@ main loop
 - `src/core/view/MultiViewManager.cpp`
 - `src/core/view/RenderingMode.cpp`
 
-`ExtendedGaussianViewer`는 자체 렌더러처럼 보이지만, 사실 대부분의 프레임 orchestration은 SIBR의 `MultiViewBase`가 맡는다.
+`MGStreamViewer`는 자체 렌더러처럼 보이지만, 사실 대부분의 프레임 orchestration은 SIBR의 `MultiViewBase`가 맡는다.
 
 #### `MultiViewBase::onUpdate`
 

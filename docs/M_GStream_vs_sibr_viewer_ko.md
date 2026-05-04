@@ -1,4 +1,4 @@
-# Extended Gaussian와 SIBR Viewer의 차이 정리
+# MGStream과 SIBR Viewer의 차이 정리
 
 ## 한 줄 결론
 
@@ -47,8 +47,8 @@
 - `src/projects/M_GStream/apps/M_GStreamViewer/main.cpp`
   - `sibr::Window` 생성
   - `viewer.onUpdate()`, `viewer.onRender()`, `viewer.onSwapBuffer()` 호출
-- `src/projects/M_GStream/renderer/ExtendedGaussianViewer.hpp`
-  - `ExtendedGaussianViewer`가 `sibr::MultiViewBase`를 상속
+- `src/projects/M_GStream/renderer/MGStreamViewer.hpp`
+  - `MGStreamViewer`가 `sibr::MultiViewBase`를 상속
 - `src/projects/M_GStream/renderer/CMakeLists.txt`
   - `sibr_system`, `sibr_view`, `sibr_assets`, `sibr_renderer` 링크
 
@@ -74,7 +74,7 @@ SIBR 기본 viewer와 실질적으로 달라지는 지점은 아래다.
 
 ```mermaid
 flowchart LR
-    A["SIBR Core\nWindow / MultiView / Camera / RT / UI plumbing"] --> B["ExtendedGaussianViewer"]
+    A["SIBR Core\nWindow / MultiView / Camera / RT / UI plumbing"] --> B["MGStreamViewer"]
     B --> C["GaussianScene\n씬 인스턴스"]
     B --> D["ResourceManager\nCPU Gaussian 자산"]
     B --> E["RenderingSystem"]
@@ -88,7 +88,7 @@ flowchart LR
 이 그림이 말하는 핵심은 단순하다.
 
 - 왼쪽 절반은 SIBR 프레임워크다.
-- 오른쪽 절반은 Extended Gaussian 전용 로직이다.
+- 오른쪽 절반은 MGStream 전용 로직이다.
 
 ## 어느 정도나 다른가
 
@@ -118,7 +118,7 @@ flowchart LR
 
 ## 항목별 비교표
 
-| 구분 | SIBR 기본 viewer 느낌 | Extended Gaussian |
+| 구분 | SIBR 기본 viewer 느낌 | MGStream |
 | --- | --- | --- |
 | 실행 프레임 | 공용 SIBR app 패턴 | 동일 패턴 사용 |
 | 뷰 구성 | MultiViewBase 기반 | 그대로 사용 |
@@ -135,7 +135,7 @@ flowchart LR
 SIBR와의 차이를 빠르게 파악하려면 아래 순서가 좋다.
 
 1. `src/projects/M_GStream/apps/M_GStreamViewer/main.cpp`
-2. `src/projects/M_GStream/renderer/ExtendedGaussianViewer.*`
+2. `src/projects/M_GStream/renderer/MGStreamViewer.*`
 3. `src/projects/M_GStream/renderer/resource/*`
 4. `src/projects/M_GStream/renderer/scene/*`
 5. `src/projects/M_GStream/renderer/subsystem/rendering_system/*`

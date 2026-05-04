@@ -8,11 +8,11 @@
 #define SIBR_EXPORT
 #define SIBR_NO_EXPORT
 #else
-#ifndef SIBR_EXTENDED_GAUSSIAN_EXPORT
-#ifdef SIBR_EXTENDED_GAUSSIAN_EXPORTS
-#define SIBR_EXTENDED_GAUSSIAN_EXPORT __declspec(dllexport)
+#ifndef SIBR_MGSTREAM_EXPORT
+#ifdef SIBR_MGSTREAM_EXPORTS
+#define SIBR_MGSTREAM_EXPORT __declspec(dllexport)
 #else
-#define SIBR_EXTENDED_GAUSSIAN_EXPORT __declspec(dllimport)
+#define SIBR_MGSTREAM_EXPORT __declspec(dllimport)
 #endif
 #endif
 #ifndef SIBR_NO_EXPORT
@@ -20,5 +20,5 @@
 #endif
 #endif
 #else
-#define SIBR_EXTENDED_GAUSSIAN_EXPORT
+#define SIBR_MGSTREAM_EXPORT
 #endif

@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M-GStream</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }
+
+  /* Dark theme (default) */
+  .theme-dark {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --surface-2: #161616;
+    --surface-3: #1a1a1a;
+    --surface-4: #1e1e1e;
+    --border: #1e1e1e;
+    --border-2: #252525;
+    --border-3: #2a2a2a;
+    --border-strong: #333;
+    --text: #ccc;
+    --text-strong: #ddd;
+    --text-dim: #888;
+    --text-faint: #666;
+    --text-muted: #555;
+    --text-ghost: #444;
+    --key-bg: #1e1e1e;
+    --key-text: #bbb;
+    --btn-bg: #1a1a1a;
+    --btn-border: #2a2a2a;
+    --btn-text: #777;
+    --overlay-bg: rgba(14,14,14,0.95);
+    --viewer-bg: radial-gradient(ellipse at 40% 40%, #1a2a1a 0%, #0a0a0a 70%);
+    --accent: #4d9e6e;
+    --accent-dim: rgba(77,158,110,0.10);
+    --accent-border: rgba(77,158,110,0.28);
+    --accent-glow: 0 0 10px rgba(77,158,110,0.25);
+    --accent-text: #4d9e6e;
+    --danger: #a05050;
+    --danger-dim: rgba(160,80,80,0.10);
+    --danger-border: rgba(160,80,80,0.28);
+  }
+
+  /* Light theme */
+  .theme-light {
+    --bg: #f6f7f8;
+    --surface: #ffffff;
+    --surface-2: #f9fafb;
+    --surface-3: #f1f3f5;
+    --surface-4: #e9ecef;
+    --border: #e5e7eb;
+    --border-2: #dde1e6;
+    --border-3: #d0d5dc;
+    --border-strong: #c4cad2;
+    --text: #222;
+    --text-strong: #111;
+    --text-dim: #555;
+    --text-faint: #777;
+    --text-muted: #8a8f96;
+    --text-ghost: #a8adb4;
+    --key-bg: #eef0f3;
+    --key-text: #333;
+    --btn-bg: #f1f3f5;
+    --btn-border: #dde1e6;
+    --btn-text: #555;
+    --overlay-bg: rgba(255,255,255,0.97);
+    --viewer-bg: radial-gradient(ellipse at 40% 40%, #dce7de 0%, #e5e8ea 70%);
+    --accent: #2f7a4f;
+    --accent-dim: rgba(47,122,79,0.10);
+    --accent-border: rgba(47,122,79,0.32);
+    --accent-glow: 0 0 10px rgba(47,122,79,0.20);
+    --accent-text: #2f7a4f;
+    --danger: #b84242;
+    --danger-dim: rgba(184,66,66,0.08);
+    --danger-border: rgba(184,66,66,0.30);
+  }
+
+  body { background: var(--bg); }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes slide-in-right { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .panel-focus-ring {
+    box-shadow: 0 0 0 1.5px var(--accent), var(--accent-glow) !important;
+    transition: box-shadow 0.2s ease;
+  }
+  .tweaks-panel {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    border-radius: 10px; padding: 16px; z-index: 9999;
+    width: 240px; animation: slide-in-right 0.2s ease;
+    display: none; color: var(--text);
+  }
+  .tweaks-panel.visible { display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "sidebarWidth": 190
+}/*EDITMODE-END*/;
+
+function getSaved(key, def) {
+  try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : def; } catch { return def; }
+}
+function setSaved(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+const STATUS_COLORS = {
+  dark:  { connected: '#4d9e6e', disconnected: '#a05050', connecting: '#a08a3a', streaming: '#4d7fc4' },
+  light: { connected: '#2f7a4f', disconnected: '#b84242', connecting: '#a07a1e', streaming: '#2a6bc0' },
+};
+
+function StatusDot({ status, theme }) {
+  const c = STATUS_COLORS[theme][status] || 'var(--text-faint)';
+  const labels = { connected: 'Connected', disconnected: 'Disconnected', connecting: 'Connecting…', streaming: 'Streaming' };
+  const pulse = status === 'connecting' || status === 'streaming';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: '50%', background: c,
+        display: 'inline-block', flexShrink: 0,
+        animation: pulse ? 'pulse-dot 1.2s ease-in-out infinite' : 'none',
+        boxShadow: `0 0 6px ${c}`,
+      }}/>
+      <span style={{ color: c, fontSize: 11, fontWeight: 600, letterSpacing: '0.03em' }}>{labels[status]}</span>
+    </span>
+  );
+}
+
+function TopBar({ wsStatus, streamStatus, scene, activePanel, theme, onStopStream, onConnectWS, onDisconnect, onToggleTheme }) {
+  const isStreaming = streamStatus === 'streaming';
+  const isConnected = wsStatus === 'connected' || wsStatus === 'streaming';
+
+  const panelLabels = {
+    camera: { icon: '⌨', text: 'Camera Control · Keyboard active' },
+    scenes: { icon: '⊞', text: 'Browse Scenes · Panel active' },
+    viewer: { icon: '▶', text: 'Viewer · Keyboard navigation' },
+  };
+  const pi = panelLabels[activePanel];
+
+  const pillBase = {
+    borderRadius: 5, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+    fontFamily: 'inherit', fontWeight: 600, flexShrink: 0,
+  };
+
+  return (
+    <div style={{
+      height: 40, background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', padding: '0 12px', gap: 12, flexShrink: 0,
+      position: 'relative', zIndex: 100,
+    }}>
+      <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 13, letterSpacing: '0.05em', flexShrink: 0 }}>M_GStream</span>
+
+      {pi && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+          borderRadius: 5, padding: '2px 8px', animation: 'fade-in 0.2s ease',
+        }}>
+          <span style={{ fontSize: 10 }}>{pi.icon}</span>
+          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>{pi.text}</span>
+        </div>
+      )}
+
+      {scene && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>·</span>
+          <span style={{
+            color: 'var(--text-dim)', fontSize: 11, overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160,
+          }}>{scene}</span>
+        </div>
+      )}
+
+      <div style={{ flex: 1 }} />
+
+      <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'} style={{
+        background: 'transparent', border: '1px solid var(--border-3)', color: 'var(--text-dim)',
+        borderRadius: 5, padding: '3px 8px', fontSize: 12, cursor: 'pointer',
+        fontFamily: 'inherit', flexShrink: 0, lineHeight: 1,
+      }}>{theme === 'dark' ? '☾' : '☀'}</button>
+
+      <StatusDot status={wsStatus} theme={theme} />
+      <div style={{ width: 1, height: 18, background: 'var(--border-3)', flexShrink: 0 }} />
+
+      {isStreaming ? (
+        <button onClick={onStopStream} style={{
+          ...pillBase, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+          color: 'var(--accent-text)', display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <span style={{ width: 7, height: 7, background: 'var(--accent)', borderRadius: 1, display: 'inline-block' }}/>
+          Stop Stream
+        </button>
+      ) : (
+        <button style={{ ...pillBase, background: 'var(--btn-bg)', border: '1px solid var(--btn-border)', color: 'var(--btn-text)' }}>
+          ▶ Start Stream
+        </button>
+      )}
+
+      {isConnected ? (
+        <button onClick={onDisconnect} style={{ ...pillBase, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', color: 'var(--accent-text)' }}>Disconnect WS</button>
+      ) : (
+        <button onClick={onConnectWS} style={{ ...pillBase, background: 'var(--btn-bg)', border: '1px solid var(--btn-border)', color: 'var(--btn-text)' }}>Connect WS</button>
+      )}
+    </div>
+  );
+}
+
+function Slider({ label, value, min, max, step, unit, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{label}</span>
+        <span style={{
+          color: 'var(--accent)', fontSize: 11, fontWeight: 600,
+          background: 'var(--accent-dim)', padding: '1px 6px', borderRadius: 3,
+          minWidth: 36, textAlign: 'right',
+        }}>{value}{unit || ''}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer', height: 3 }}
+      />
+    </div>
+  );
+}
+
+function SectionHeader({ label }) {
+  return (
+    <div style={{
+      fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-muted)',
+      fontWeight: 700, textTransform: 'uppercase',
+      borderBottom: '1px solid var(--border)', paddingBottom: 5, marginBottom: 8,
+    }}>{label}</div>
+  );
+}
+
+function KeyBadge({ k }) {
+  return (
+    <span style={{
+      background: 'var(--key-bg)', border: '1px solid var(--border-strong)', borderRadius: 3,
+      padding: '1px 5px', fontSize: 10, color: 'var(--key-text)', fontWeight: 600, lineHeight: 1.4,
+    }}>{k}</span>
+  );
+}
+
+function Sidebar({ activePanel, setActivePanel, cameraEnabled, setCameraEnabled, moveSpeed, setMoveSpeed, rotateSpeed, setRotateSpeed, scene, width }) {
+  const isCamera = activePanel === 'camera';
+  return (
+    <div
+      onClick={() => setActivePanel('camera')}
+      className={isCamera ? 'panel-focus-ring' : ''}
+      style={{
+        width, background: 'var(--surface)', borderRight: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', flexShrink: 0,
+        transition: 'box-shadow 0.25s ease', position: 'relative',
+      }}
+    >
+      {isCamera && (
+        <div style={{
+          position: 'absolute', top: 6, right: 8, zIndex: 10,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+          borderRadius: 4, padding: '1px 7px', fontSize: 9, color: 'var(--accent)',
+          fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+          animation: 'fade-in 0.2s ease',
+        }}>ACTIVE</div>
+      )}
+
+      <div style={{
+        padding: '8px 12px 6px', fontSize: 9, letterSpacing: '0.12em',
+        color: 'var(--text-ghost)', fontWeight: 700, textTransform: 'uppercase',
+        borderBottom: '1px solid var(--border)', flexShrink: 0,
+      }}>Controls</div>
+
+      <div className="scrollbar-thin" style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <SectionHeader label="Loaded Scene" />
+          <div style={{
+            background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+            borderRadius: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5,
+          }}>
+            <div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={scene.name}>{scene.name}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={scene.path}>{scene.path}</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{
+                background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+                color: 'var(--accent)', fontSize: 9, padding: '1px 6px', borderRadius: 3, fontWeight: 600,
+              }}>loaded</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{scene.modelDir}</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SectionHeader label="Camera Control" />
+          <button
+            onClick={e => { e.stopPropagation(); setCameraEnabled(!cameraEnabled); }}
+            style={{
+              width: '100%', padding: '6px 10px', borderRadius: 5,
+              background: cameraEnabled ? 'var(--accent-dim)' : 'var(--btn-bg)',
+              border: `1px solid ${cameraEnabled ? 'var(--accent-border)' : 'var(--btn-border)'}`,
+              color: cameraEnabled ? 'var(--accent)' : 'var(--btn-text)',
+              fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+              letterSpacing: '0.02em', transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: cameraEnabled ? 'var(--accent)' : 'var(--text-ghost)',
+            }}/>
+            {cameraEnabled ? 'Camera Control ON' : 'Camera Control OFF'}
+          </button>
+        </div>
+
+        <div>
+          <SectionHeader label="Speed" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Slider label="Move" value={moveSpeed} min={0.01} max={5} step={0.01} onChange={setMoveSpeed} />
+            <Slider label="Rotate (deg/s)" value={rotateSpeed} min={1} max={180} step={1} onChange={setRotateSpeed} />
+          </div>
+        </div>
+
+        <div>
+          <SectionHeader label="Keyboard Shortcuts" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {[
+              { keys: ['W','A','S','D'], label: 'Move' },
+              { keys: ['Q','E'], label: 'World Y ±' },
+              { keys: ['↑','↓','←','→'], label: 'Free look' },
+              { keys: ['Z','X'], label: 'Roll' },
+            ].map(({ keys, label }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>{keys.map(k => <KeyBadge key={k} k={k} />)}</div>
+                <span style={{ color: 'var(--text-faint)', fontSize: 10, textAlign: 'right', whiteSpace: 'nowrap' }}>{label}</span>
+              </div>
+            ))}
+            <div style={{ color: 'var(--text-ghost)', fontSize: 10, marginTop: 2, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+              Drag in viewer → Look sensitivity
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Viewer({ activePanel, setActivePanel }) {
+  const isActive = activePanel === 'viewer';
+  return (
+    <div
+      onClick={() => setActivePanel('viewer')}
+      className={isActive ? 'panel-focus-ring' : ''}
+      style={{
+        flex: 1, position: 'relative', overflow: 'hidden',
+        background: 'var(--viewer-bg)',
+        cursor: 'crosshair', transition: 'box-shadow 0.25s ease',
+      }}
+    >
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.6,
+        background: `radial-gradient(ellipse 60% 40% at 35% 45%, rgba(40,60,40,0.35) 0%, transparent 70%),
+                     radial-gradient(ellipse 40% 55% at 65% 50%, rgba(20,30,20,0.28) 0%, transparent 60%)`,
+      }}/>
+
+      {isActive && (
+        <div style={{
+          position: 'absolute', top: 12, left: 12, zIndex: 10,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+          borderRadius: 5, padding: '3px 10px', fontSize: 10, color: 'var(--accent)',
+          fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+          animation: 'fade-in 0.2s ease', display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: '50%', animation: 'pulse-dot 1.5s infinite' }}/>
+          VIEWER ACTIVE · Keyboard navigation enabled
+        </div>
+      )}
+
+      <div style={{ position: 'absolute', bottom: 12, left: 12, color: 'var(--text-ghost)', fontSize: 10 }}>
+        Click to activate viewer keyboard navigation
+      </div>
+      <div style={{ position: 'absolute', bottom: 12, right: 12, color: 'var(--text-faint)', fontSize: 10, fontWeight: 600 }}>~60 fps</div>
+    </div>
+  );
+}
+
+function Field({ label, value }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</span>
+      <div style={{
+        background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4,
+        padding: '4px 8px', fontSize: 10, color: 'var(--text-dim)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }} title={value}>{value}</div>
+    </div>
+  );
+}
+
+function InfoPanel({ httpOrigin, wsUrl, cameraEnabled, moveSpeed, rotateSpeed, scene }) {
+  const [show, setShow] = useState(true);
+  const [tab, setTab] = useState('connection');
+  const [pos, setPos] = useState({ x: 2.341, y: 1.582, z: -4.217, yaw: 47.3, pitch: -12.5, roll: 0.0 });
+
+  useEffect(() => {
+    if (!cameraEnabled) return;
+    const id = setInterval(() => {
+      setPos(p => ({
+        x: +(p.x + (Math.random() - 0.5) * 0.02).toFixed(3),
+        y: +(p.y + (Math.random() - 0.5) * 0.01).toFixed(3),
+        z: +(p.z + (Math.random() - 0.5) * 0.02).toFixed(3),
+        yaw: +(p.yaw + (Math.random() - 0.5) * 0.3).toFixed(1),
+        pitch: +(p.pitch + (Math.random() - 0.5) * 0.2).toFixed(1),
+        roll: p.roll,
+      }));
+    }, 400);
+    return () => clearInterval(id);
+  }, [cameraEnabled]);
+
+  if (!show) {
+    return (
+      <button onClick={() => setShow(true)} title="Show info panel" style={{
+        position: 'absolute', top: 8, right: 8, zIndex: 50,
+        width: 28, height: 28, borderRadius: 6,
+        background: 'var(--overlay-bg)', border: '1px solid var(--border-2)',
+        color: 'var(--text-dim)', cursor: 'pointer', fontSize: 14, fontFamily: 'inherit',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backdropFilter: 'blur(8px)',
+      }}>ⓘ</button>
+    );
+  }
+
+  const tabs = [
+    { id: 'connection', label: 'Connection' },
+    { id: 'camera', label: 'Camera' },
+    { id: 'scene', label: 'Scene' },
+  ];
+
+  return (
+    <div style={{
+      position: 'absolute', top: 8, right: 8, zIndex: 50,
+      background: 'var(--overlay-bg)', border: '1px solid var(--border-2)',
+      borderRadius: 8, width: 300,
+      display: 'flex', flexDirection: 'column',
+      backdropFilter: 'blur(8px)', overflow: 'hidden',
+      animation: 'slide-in-right 0.2s ease',
+    }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            flex: 1, background: tab === t.id ? 'var(--accent-dim)' : 'transparent',
+            border: 'none', borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+            color: tab === t.id ? 'var(--accent)' : 'var(--text-faint)',
+            padding: '7px 0', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+            fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+            transition: 'all 0.15s',
+          }}>{t.label}</button>
+        ))}
+        <button onClick={() => setShow(false)} title="Hide panel" style={{
+          background: 'transparent', border: 'none', borderLeft: '1px solid var(--border)',
+          color: 'var(--text-ghost)', cursor: 'pointer', fontSize: 14, padding: '0 10px',
+        }}>×</button>
+      </div>
+
+      <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {tab === 'connection' && (
+          <>
+            <Field label="HTTP Origin" value={httpOrigin} />
+            <Field label="WebSocket URL" value={wsUrl} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button style={{
+                flex: 1, padding: '6px 0', background: 'var(--accent-dim)',
+                border: '1px solid var(--accent-border)', borderRadius: 5,
+                color: 'var(--accent)', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+              }}>Use Current Origin</button>
+              <button style={{
+                flex: 1, padding: '6px 0', background: 'var(--danger-dim)',
+                border: '1px solid var(--danger-border)', borderRadius: 5,
+                color: 'var(--danger)', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+              }}>Disconnect</button>
+            </div>
+          </>
+        )}
+
+        {tab === 'camera' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 10, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Control State</span>
+              <span style={{
+                fontSize: 10, color: cameraEnabled ? 'var(--accent)' : 'var(--text-faint)',
+                background: cameraEnabled ? 'var(--accent-dim)' : 'var(--surface-3)',
+                border: `1px solid ${cameraEnabled ? 'var(--accent-border)' : 'var(--border-3)'}`,
+                padding: '1px 7px', borderRadius: 3, fontWeight: 600,
+              }}>{cameraEnabled ? 'ENABLED' : 'DISABLED'}</span>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Position (x, y, z)</div>
+              <div style={{
+                background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4,
+                padding: '6px 10px', fontSize: 11, color: 'var(--text)',
+                fontFamily: 'Consolas, monospace',
+                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4,
+              }}>
+                <span><span style={{ color: 'var(--text-muted)' }}>x</span> {pos.x.toFixed(3)}</span>
+                <span><span style={{ color: 'var(--text-muted)' }}>y</span> {pos.y.toFixed(3)}</span>
+                <span><span style={{ color: 'var(--text-muted)' }}>z</span> {pos.z.toFixed(3)}</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Rotation (yaw, pitch, roll)</div>
+              <div style={{
+                background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4,
+                padding: '6px 10px', fontSize: 11, color: 'var(--text)',
+                fontFamily: 'Consolas, monospace',
+                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4,
+              }}>
+                <span><span style={{ color: 'var(--text-muted)' }}>y</span> {pos.yaw.toFixed(1)}°</span>
+                <span><span style={{ color: 'var(--text-muted)' }}>p</span> {pos.pitch.toFixed(1)}°</span>
+                <span><span style={{ color: 'var(--text-muted)' }}>r</span> {pos.roll.toFixed(1)}°</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Move</div>
+                <div style={{ fontSize: 11, color: 'var(--text-strong)' }}>{moveSpeed.toFixed(2)}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Rotate</div>
+                <div style={{ fontSize: 11, color: 'var(--text-strong)' }}>{rotateSpeed}°/s</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>FPS</div>
+                <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>58.7</div>
+              </div>
+            </div>
+            <button style={{
+              padding: '5px 0', background: 'transparent', border: '1px solid var(--border-3)',
+              borderRadius: 4, color: 'var(--text-dim)', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+            }}>Reset Camera</button>
+          </>
+        )}
+
+        {tab === 'scene' && (
+          <>
+            <Field label="Name" value={scene.name} />
+            <Field label="Path" value={scene.path} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Type</div>
+                <div style={{ fontSize: 11, color: 'var(--text-strong)' }}>{scene.modelDir}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Gaussians</div>
+                <div style={{ fontSize: 11, color: 'var(--text-strong)' }}>1.42M</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>VRAM</div>
+                <div style={{ fontSize: 11, color: 'var(--text-strong)' }}>2.1 GB</div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const MOCK_SCENES = [
+  { id: 1, name: 'scene_180', path: '/home/user/scenes/scene_180', modelDir: 'set as model_dir (current)', loaded: true },
+  { id: 2, name: 'scene_180_v2', path: '/home/user/scenes/scene_180_v2', modelDir: 'set as model_dir' },
+  { id: 3, name: 'scene_gpu_180', path: '/home/user/scenes/scene_gpu_180', modelDir: 'set as model_dir (converted)' },
+  { id: 4, name: 'scene_mlp_180_v2', path: '/home/user/scenes/scene_mlp_180_v2', modelDir: 'set as model_dir' },
+];
+
+function ScenesBrowser({ activePanel, setActivePanel, onClose }) {
+  const [search, setSearch] = useState('180');
+  const [selected, setSelected] = useState(2);
+  const isActive = activePanel === 'scenes';
+
+  return (
+    <div
+      onClick={() => setActivePanel('scenes')}
+      className={isActive ? 'panel-focus-ring' : ''}
+      style={{
+        position: 'absolute', left: '50%', top: '50%',
+        transform: 'translate(-50%, -50%)', width: 520, maxHeight: 360,
+        background: 'var(--overlay-bg)', border: '1px solid var(--border-2)',
+        borderRadius: 10, overflow: 'hidden', zIndex: 40,
+        display: 'flex', flexDirection: 'column',
+        backdropFilter: 'blur(10px)',
+        transition: 'box-shadow 0.25s ease', animation: 'fade-in 0.15s ease',
+      }}
+    >
+      {isActive && (
+        <div style={{
+          position: 'absolute', top: 8, right: 40, zIndex: 10,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+          borderRadius: 4, padding: '1px 7px', fontSize: 9, color: 'var(--accent)',
+          fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>ACTIVE</div>
+      )}
+
+      <div style={{
+        padding: '8px 10px', borderBottom: '1px solid var(--border)',
+        display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0,
+      }}>
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          placeholder="Search scenes…"
+          style={{
+            flex: 1, background: 'var(--surface-3)', border: '1px solid var(--border-3)',
+            borderRadius: 5, padding: '5px 8px', color: 'var(--text)',
+            fontSize: 12, fontFamily: 'inherit', outline: 'none',
+          }}
+        />
+        {['Search', 'Clear', 'Run', 'Up'].map(btn => (
+          <button key={btn} onClick={e => e.stopPropagation()} style={{
+            background: 'var(--btn-bg)', border: '1px solid var(--btn-border)', color: 'var(--btn-text)',
+            borderRadius: 4, padding: '4px 8px', fontSize: 10, cursor: 'pointer',
+            fontFamily: 'inherit', whiteSpace: 'nowrap',
+          }}>{btn}</button>
+        ))}
+        <button onClick={e => { e.stopPropagation(); onClose(); }} style={{
+          background: 'none', border: 'none', color: 'var(--text-muted)',
+          cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 2px',
+        }}>×</button>
+      </div>
+
+      <div style={{
+        padding: '6px 12px', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', borderBottom: '1px solid var(--border)', flexShrink: 0,
+      }}>
+        <span style={{ color: 'var(--text-dim)', fontSize: 12, fontWeight: 600 }}>Content Browser</span>
+        <button onClick={e => e.stopPropagation()} style={{
+          background: 'none', border: 'none', color: 'var(--text-muted)',
+          cursor: 'pointer', fontSize: 10, fontFamily: 'inherit',
+        }}>↺ Refresh</button>
+      </div>
+
+      <div className="scrollbar-thin" style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+        {MOCK_SCENES.map(s => {
+          const isSel = selected === s.id;
+          return (
+            <div key={s.id}
+              onClick={e => { e.stopPropagation(); setSelected(s.id); setActivePanel('scenes'); }}
+              style={{
+                borderRadius: 6, marginBottom: 4, padding: '8px 10px',
+                background: isSel ? 'var(--accent-dim)' : 'var(--surface)',
+                border: `1px solid ${isSel ? 'var(--accent-border)' : 'var(--border)'}`,
+                cursor: 'pointer', transition: 'all 0.12s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 10, flexShrink: 0 }}>□</span>
+                  <span style={{
+                    color: isSel ? 'var(--accent)' : (s.loaded ? 'var(--text)' : 'var(--text-dim)'),
+                    fontSize: 12, fontWeight: s.loaded ? 700 : 400,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{s.name}</span>
+                  {s.loaded && (
+                    <span style={{
+                      fontSize: 8, color: 'var(--accent)', background: 'var(--accent-dim)',
+                      border: '1px solid var(--accent-border)', borderRadius: 3,
+                      padding: '0 4px', flexShrink: 0, fontWeight: 700,
+                    }}>LOADED</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {['Open', 'Select', 'Load'].map(action => (
+                    <button key={action} onClick={e => e.stopPropagation()} style={{
+                      background: 'var(--btn-bg)', border: '1px solid var(--btn-border)',
+                      color: 'var(--btn-text)', borderRadius: 4, padding: '2px 7px',
+                      fontSize: 9, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>{action}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{
+                fontSize: 9, color: 'var(--text-muted)', overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4,
+              }}>{s.path}</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <span style={{
+                  background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+                  color: 'var(--text-muted)', fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                }}>directory</span>
+                <span style={{
+                  background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+                  color: 'var(--text-muted)', fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200,
+                }}>{s.modelDir}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selected && (() => {
+        const s = MOCK_SCENES.find(x => x.id === selected);
+        return s ? (
+          <div style={{
+            borderTop: '1px solid var(--border)', padding: '8px 12px',
+            display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+          }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Selected Path</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.path}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Kind</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>directory</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Load As</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>model_dir</div>
+            </div>
+            <button onClick={e => e.stopPropagation()} style={{
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              color: 'var(--accent)', borderRadius: 6, padding: '6px 14px',
+              fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, flexShrink: 0,
+            }}>Load Selected</button>
+          </div>
+        ) : null;
+      })()}
+
+      <div style={{
+        borderTop: '1px solid var(--border)', padding: '4px 12px',
+        fontSize: 9, color: 'var(--text-muted)', flexShrink: 0,
+      }}>Loaded {MOCK_SCENES.length} search results for "{search}" under /home/…</div>
+    </div>
+  );
+}
+
+function TweaksPanel({ visible, theme, setTheme, sidebarWidth, setSidebarWidth }) {
+  return (
+    <div className={`tweaks-panel ${visible ? 'visible' : ''}`}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 12, letterSpacing: '0.05em' }}>TWEAKS</div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Theme</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { id: 'dark', label: '☾ Dark' },
+            { id: 'light', label: '☀ Light' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTheme(t.id)} style={{
+              flex: 1, padding: '6px 0', borderRadius: 5,
+              background: theme === t.id ? 'var(--accent-dim)' : 'var(--btn-bg)',
+              border: `1px solid ${theme === t.id ? 'var(--accent-border)' : 'var(--btn-border)'}`,
+              color: theme === t.id ? 'var(--accent)' : 'var(--text-dim)',
+              fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sidebar Width</div>
+        <input type="range" min={160} max={300} step={10} value={sidebarWidth}
+          onChange={e => setSidebarWidth(parseInt(e.target.value))}
+          style={{ width: '100%', accentColor: 'var(--accent)' }}
+        />
+        <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>{sidebarWidth}px</span>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const saved = getSaved('mgstream-state', {});
+  const tweakDefs = getSaved('mgstream-tweaks', TWEAK_DEFAULTS);
+
+  const [theme, setTheme] = useState(tweakDefs.theme || 'dark');
+  const [sidebarWidth, setSidebarWidth] = useState(tweakDefs.sidebarWidth || 220);
+  const [tweaksVisible, setTweaksVisible] = useState(false);
+
+  const [wsStatus, setWsStatus] = useState('connected');
+  const [streamStatus, setStreamStatus] = useState('streaming');
+  const [activePanel, setActivePanel] = useState(saved.activePanel || 'camera');
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [moveSpeed, setMoveSpeed] = useState(0.44);
+  const [rotateSpeed, setRotateSpeed] = useState(20);
+  const [showScenes, setShowScenes] = useState(true);
+
+  const scene = {
+    name: 'scene_180_v2',
+    path: '/home/ubuntu/gaussian/data/scene_180_v2',
+    modelDir: 'model_dir',
+  };
+
+  useEffect(() => { setSaved('mgstream-state', { activePanel }); }, [activePanel]);
+
+  useEffect(() => {
+    setSaved('mgstream-tweaks', { theme, sidebarWidth });
+    window.parent?.postMessage({ type: '__edit_mode_set_keys', edits: { theme, sidebarWidth } }, '*');
+  }, [theme, sidebarWidth]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksVisible(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaksVisible(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent?.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const handleStopStream = () => setStreamStatus(streamStatus === 'streaming' ? 'connected' : 'streaming');
+  const handleConnectWS = () => { setWsStatus('connecting'); setTimeout(() => setWsStatus('connected'), 1500); };
+  const handleDisconnect = () => setWsStatus('disconnected');
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
+  return (
+    <div className={`theme-${theme}`} style={{
+      width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+      background: 'var(--bg)', color: 'var(--text)',
+    }}>
+      <TopBar
+        wsStatus={wsStatus} streamStatus={streamStatus} scene={scene.name}
+        activePanel={activePanel} theme={theme}
+        onStopStream={handleStopStream} onConnectWS={handleConnectWS}
+        onDisconnect={handleDisconnect} onToggleTheme={toggleTheme}
+      />
+
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        <Sidebar
+          activePanel={activePanel} setActivePanel={setActivePanel}
+          cameraEnabled={cameraEnabled} setCameraEnabled={setCameraEnabled}
+          moveSpeed={moveSpeed} setMoveSpeed={setMoveSpeed}
+          rotateSpeed={rotateSpeed} setRotateSpeed={setRotateSpeed}
+          scene={scene} width={sidebarWidth}
+        />
+
+        <Viewer activePanel={activePanel} setActivePanel={setActivePanel} />
+
+        <InfoPanel
+          httpOrigin="http://100.84.211.62:8080"
+          wsUrl="ws://100.89.211.62:8080/ws/ctrl"
+          cameraEnabled={cameraEnabled}
+          moveSpeed={moveSpeed} rotateSpeed={rotateSpeed} scene={scene}
+        />
+
+        {showScenes && (
+          <ScenesBrowser
+            activePanel={activePanel} setActivePanel={setActivePanel}
+            onClose={() => { setShowScenes(false); setActivePanel('viewer'); }}
+          />
+        )}
+
+        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 30 }}>
+          <button
+            onClick={() => { setShowScenes(v => !v); setActivePanel(showScenes ? 'camera' : 'scenes'); }}
+            style={{
+              background: showScenes ? 'var(--accent-dim)' : 'var(--overlay-bg)',
+              border: `1px solid ${showScenes ? 'var(--accent-border)' : 'var(--border-3)'}`,
+              color: showScenes ? 'var(--accent)' : 'var(--text-dim)',
+              borderRadius: 8, padding: '7px 18px', fontSize: 12,
+              cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+              backdropFilter: 'blur(8px)', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', gap: 7,
+            }}
+          >
+            <span style={{ fontSize: 14 }}>⊞</span>
+            Browse Scenes
+            {showScenes && <span style={{ fontSize: 10, opacity: 0.8 }}>· active</span>}
+          </button>
+        </div>
+      </div>
+
+      <TweaksPanel
+        visible={tweaksVisible}
+        theme={theme} setTheme={setTheme}
+        sidebarWidth={sidebarWidth} setSidebarWidth={setSidebarWidth}
+      />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

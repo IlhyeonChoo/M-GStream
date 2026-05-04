@@ -7,241 +7,176 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-    <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
-    <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/></symbol>
-    <symbol id="icon-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><path d="M1 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z"/></symbol>
-    <symbol id="icon-speed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
-    <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
-    <symbol id="icon-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></symbol>
-    <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
-    <symbol id="icon-chev-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></symbol>
-    <symbol id="icon-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
-    <symbol id="icon-chev-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
-    <symbol id="icon-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
-    <symbol id="icon-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></symbol>
-    <symbol id="icon-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-7 7 7-7 7 7"/></symbol>
-    <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
-    <symbol id="icon-pose" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12l5-5"/><path d="M17 7h-5v5"/></symbol>
-  </svg>
-
-  <div class="stream-stage">
-    <img id="stream-preview" alt="">
-  </div>
-
-  <header class="topbar" id="topbar">
-    <div class="topbar__logo">M_<span style="color:var(--accent)">GStream</span></div>
-    <div class="topbar__chip topbar__chip--status topbar__chip--status--down" id="status-chip">
-      <div class="topbar__chip-dot"></div>
-      <span id="status-chip-text">disconnected</span>
+  <div id="app" class="theme-dark">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/></symbol>
+      <symbol id="icon-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><path d="M1 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="icon-speed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+      <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+      <symbol id="icon-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="icon-chev-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></symbol>
+      <symbol id="icon-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="icon-chev-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
+      <symbol id="icon-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+      <symbol id="icon-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></symbol>
+      <symbol id="icon-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-7 7 7-7 7 7"/></symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
+      <symbol id="icon-pose" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12l5-5"/><path d="M17 7h-5v5"/></symbol>
+    </svg>
+    <div class="stream-stage" id="stream-stage">
+      <img id="stream-preview" alt="">
+      <div class="viewer-hint">Click to activate viewer keyboard navigation</div>
+      <div class="viewer-fps">~60 fps</div>
     </div>
-    <div class="topbar__chip topbar__chip--file" id="loaded-file-chip" hidden>
-      <svg class="icon" aria-hidden="true"><use href="#icon-file"/></svg>
-      <span id="loaded-file-chip-text">--</span>
-    </div>
-    <div class="topbar__spacer"></div>
-    <button id="toggle-conn" class="topbar__btn topbar__btn--conn" type="button">
-      <svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg>Connection
-    </button>
-    <button id="toggle-stream" class="topbar__btn topbar__btn--stream" type="button" data-state="closed">&#9654; Open Stream</button>
-    <button id="connect-ws" class="topbar__btn topbar__btn--ws" type="button">
-      <svg class="icon" aria-hidden="true"><use href="#icon-wifi"/></svg><span>Connect WS</span>
-    </button>
-    <button id="open-stream" type="button" hidden aria-hidden="true">Open Stream</button>
-  </header>
-
-  <div id="conn-dropdown" class="conn-dropdown" hidden>
-    <div class="conn-dropdown__section">
-      <div class="conn-dropdown__label">HTTP Origin</div>
-      <input id="http-origin" class="field-input" type="text" value="">
-    </div>
-    <div class="conn-dropdown__section">
-      <div class="conn-dropdown__label">WebSocket URL</div>
-      <input id="ws-url" class="field-input" type="text" value="">
-    </div>
-    <div class="conn-dropdown__actions">
-      <button id="apply-defaults" class="pose-buttons__secondary" type="button">Use Current Origin</button>
-      <button id="disconnect-ws" class="pose-buttons__secondary" type="button">Disconnect</button>
-    </div>
-  </div>
-
-  <aside id="left-sidebar" class="sidebar sidebar--left sidebar--open">
-    <div class="sidebar__header">
-      <div class="sidebar__heading">Controls</div>
-      <button id="toggle-left" class="sidebar__close" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
-    </div>
-    <div class="sidebar__body">
-      <div class="sidebar__section">
-        <div class="sidebar__label">Loaded Scene</div>
-        <div class="scene-card">
-          <div class="scene-card__name" id="scene-loaded-name">--</div>
-          <input id="loaded-source-path" class="field-input" type="text" value="" readonly>
-          <div class="scene-card__chips">
-            <div class="scene-card__chip">
-              <div class="scene-card__chip-label">State</div>
-              <div class="scene-card__chip-value scene-card__chip-value--idle" id="scene-state-chip">idle</div>
+    <header class="topbar" id="topbar">
+      <div class="topbar__logo">M_GStream</div>
+      <div class="topbar__pill--active" id="active-panel-pill" hidden><span id="active-panel-pill-icon">⌨</span><span id="active-panel-pill-text">Camera Control · Keyboard active</span></div>
+      <div class="topbar__chip topbar__chip--file" id="loaded-file-chip" hidden><svg class="icon"><use href="#icon-file"/></svg><span id="loaded-file-chip-text">--</span></div>
+      <div class="topbar__spacer"></div>
+      <button id="theme-toggle" class="topbar__btn topbar__btn--theme" type="button" aria-label="Toggle theme">☾</button>
+      <div class="topbar__chip topbar__chip--status topbar__chip--status--down" id="status-chip"><span class="topbar__chip-dot status-dot" id="status-dot"></span><span class="topbar__chip-text" id="status-chip-text">disconnected</span></div>
+      <div class="topbar__divider"></div>
+      <button id="toggle-stream" class="topbar__btn topbar__btn--stream" type="button" data-state="closed">▶ Open Stream</button>
+      <button id="connect-ws" class="topbar__btn topbar__btn--ws" type="button"><svg class="icon"><use href="#icon-wifi"/></svg><span>Connect WS</span></button>
+      <button id="open-stream" type="button" hidden aria-hidden="true">Open Stream</button>
+    </header>
+    <aside id="left-sidebar" class="sidebar sidebar--left sidebar--open">
+      <div class="sidebar__header"><div class="sidebar__heading">Controls</div><button id="toggle-left" class="sidebar__close" type="button"><svg class="icon"><use href="#icon-close"/></svg></button></div>
+      <div class="sidebar__body">
+        <div class="sidebar__section">
+          <div class="sidebar__label">Loaded Scene</div>
+          <div class="scene-card">
+            <div class="scene-card__name" id="scene-loaded-name" title="--">--</div>
+            <input id="loaded-source-path" class="scene-card__path field-input" type="text" value="" readonly title="">
+            <div class="scene-card__chips">
+              <div class="scene-card__chip"><div class="scene-card__chip-label">State</div><div class="scene-card__chip-value scene-card__chip-value--idle" id="scene-state-chip">idle</div></div>
+              <div class="scene-card__chip"><div class="scene-card__chip-label">Type</div><div class="scene-card__chip-value" id="scene-type-chip">--</div></div>
             </div>
-            <div class="scene-card__chip">
-              <div class="scene-card__chip-label">Type</div>
-              <div class="scene-card__chip-value" id="scene-type-chip">--</div>
-            </div>
+            <details class="scene-card__error-wrap"><summary>Last Load Error</summary><textarea id="last-load-error" class="field-input" rows="3" readonly></textarea></details>
+            <input type="hidden" id="load-state" value="idle">
           </div>
-          <details class="scene-card__error-wrap">
-            <summary>Last Load Error</summary>
-            <textarea id="last-load-error" class="field-input" rows="3" readonly></textarea>
+        </div>
+        <div class="sidebar__section">
+          <div class="sidebar__label">Camera Control</div>
+          <button id="toggle-camera" class="cam-toggle" type="button" aria-pressed="false"><svg class="icon"><use href="#icon-cam"/></svg><span>Camera Control OFF</span></button>
+        </div>
+        <div class="sidebar__section">
+          <div class="sidebar__label">Speed</div>
+          <div class="slider-row"><div class="slider-row__head"><span>Move</span><span class="slider-row__value" data-for="move-speed">0.60</span></div><input id="move-speed" type="range" min="0.05" max="5.0" step="0.05" value="0.6"></div>
+          <div class="slider-row"><div class="slider-row__head"><span>Rotate</span><span class="slider-row__value" data-for="rotate-speed">30</span></div><input id="rotate-speed" type="range" min="5" max="120" step="1" value="30"></div>
+        </div>
+        <div class="sidebar__section">
+          <div class="sidebar__label">Keyboard Shortcuts</div>
+          <div class="key-legend">
+            <div class="key-legend__row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></div>
+            <div class="key-legend__row"><kbd>Q</kbd><kbd>E</kbd><span>World Y +/-</span></div>
+            <div class="key-legend__row"><kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><span>Free look</span></div>
+            <div class="key-legend__row"><kbd>U</kbd><kbd>O</kbd><span>Roll</span></div>
+            <div class="key-legend__footer"><span class="key-legend__note">Drag Look · Scroll Zoom</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <button id="sidebar-left-tab" class="sidebar-tab sidebar-tab--left" type="button" hidden><svg class="icon"><use href="#icon-speed"/></svg></button>
+    <aside id="info-panel" class="info-panel">
+      <button class="info-panel__collapsed-toggle" id="info-panel-expand" type="button" aria-label="Show info panel">ⓘ</button>
+      <div class="info-panel__header"><div class="info-panel__tabs"><button class="info-panel__tab is-active" id="info-tab-connection" data-tab="connection" type="button">Connection</button><button class="info-panel__tab" id="info-tab-camera" data-tab="camera" type="button">Camera</button><button class="info-panel__tab" id="info-tab-scene" data-tab="scene" type="button">Scene</button></div><button class="info-panel__close" id="info-panel-close" type="button" aria-label="Collapse info panel"><svg class="icon"><use href="#icon-close"/></svg></button></div>
+      <div class="info-panel__body">
+        <div class="info-panel__pane is-active" data-pane="connection">
+          <div class="info-panel__field"><span class="info-panel__field-label">HTTP Origin</span><input id="http-origin" class="field-input" type="text" value=""></div>
+          <div class="info-panel__field"><span class="info-panel__field-label">WebSocket URL</span><input id="ws-url" class="field-input" type="text" value=""></div>
+          <div class="pose-buttons"><button id="apply-defaults" class="pose-buttons__primary" type="button">Use Current Origin</button><button id="disconnect-ws" class="pose-buttons__danger" type="button">Disconnect</button></div>
+        </div>
+        <div class="info-panel__pane" data-pane="camera">
+          <div class="info-panel__row"><span class="info-panel__field-label">Control State</span><span class="info-panel__pill info-panel__pill--disabled" id="camera-state-pill">DISABLED</span></div>
+          <div class="info-panel__field"><span class="info-panel__field-label">Position (x, y, z)</span><div class="info-panel__grid-3"><span class="info-panel__field-value" id="cam-pos-x">0.000</span><span class="info-panel__field-value" id="cam-pos-y">0.000</span><span class="info-panel__field-value" id="cam-pos-z">0.000</span></div></div>
+          <div class="info-panel__field"><span class="info-panel__field-label">Rotation (yaw, pitch, roll)</span><div class="info-panel__grid-3"><span class="info-panel__field-value" id="cam-rot-yaw">0.0°</span><span class="info-panel__field-value" id="cam-rot-pitch">0.0°</span><span class="info-panel__field-value" id="cam-rot-roll">0.0°</span></div></div>
+          <div class="info-panel__stats">
+            <div class="info-panel__field"><span class="info-panel__field-label">Move</span><span class="info-panel__field-value" id="cam-move-display">0.60</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">Rotate</span><span class="info-panel__field-value" id="cam-rotate-display">30</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">FPS</span><span class="info-panel__field-value" id="cam-fps-display" style="color:var(--accent)">~60</span></div>
+          </div>
+          <details class="info-panel__advanced">
+            <summary>Advanced (JSON)</summary>
+            <div class="info-panel__advanced-body">
+              <div class="info-panel__field"><span class="info-panel__field-label">Position</span><input id="position" class="field-input" type="text" value="[0, 0, 0]"></div>
+              <div class="info-panel__field"><span class="info-panel__field-label">Forward</span><input id="forward" class="field-input" type="text" value="[0, 0, -1]"></div>
+              <div class="info-panel__field"><span class="info-panel__field-label">Up</span><input id="up" class="field-input" type="text" value="[0, 1, 0]"></div>
+              <div class="info-panel__field"><span class="info-panel__field-label">FOV Y</span><input id="fovy" class="field-input" type="text" value="0.78539816339"></div>
+              <div class="info-panel__field"><span class="info-panel__field-label">Message Type</span><input id="message-type" class="field-input" type="text" value="set_camera_pose" readonly></div>
+              <div class="pose-buttons"><button id="format-payload" class="pose-buttons__secondary" type="button">Format</button><button id="send-payload" class="pose-buttons__primary" type="button">Send Payload</button></div>
+              <div class="info-panel__field"><span class="info-panel__field-label">Live Pose (JSON)</span><pre class="live-pose-preview" id="live-pose-preview" aria-hidden="true"></pre></div>
+              <details class="payload-disclosure"><summary>Show raw JSON</summary><textarea id="payload" rows="8"></textarea></details>
+            </div>
           </details>
-          <input type="hidden" id="load-state" value="idle">
         </div>
-      </div>
-
-      <div class="sidebar__section">
-        <div class="sidebar__label">Camera Control</div>
-        <button id="toggle-camera" class="cam-toggle" type="button">
-          <svg class="icon" aria-hidden="true"><use href="#icon-cam"/></svg><span>Enable Camera Control</span>
-        </button>
-      </div>
-
-      <div class="sidebar__section">
-        <div class="sidebar__label">Speed</div>
-        <div class="slider-row">
-          <div class="slider-row__head"><span>Move</span><span class="slider-row__value" data-for="move-speed">0.60</span></div>
-          <input id="move-speed" type="range" min="0.05" max="5.0" step="0.05" value="0.6">
-        </div>
-        <div class="slider-row">
-          <div class="slider-row__head"><span>Rotate (deg/s)</span><span class="slider-row__value" data-for="rotate-speed">30</span></div>
-          <input id="rotate-speed" type="range" min="5" max="120" step="1" value="30">
-        </div>
-      </div>
-
-      <div class="sidebar__section">
-        <div class="sidebar__label">Keyboard</div>
-        <div class="key-legend">
-          <div class="key-legend__row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></div>
-          <div class="key-legend__row"><kbd>Q</kbd><kbd>E</kbd><span>World Y +/-</span></div>
-          <div class="key-legend__row"><kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><span>Free look</span></div>
-          <div class="key-legend__row"><kbd>U</kbd><kbd>O</kbd><span>Roll</span></div>
-          <div class="key-legend__row"><span class="key-legend__note">Drag Look</span><span class="key-legend__note">Scroll Zoom</span></div>
-        </div>
-      </div>
-    </div>
-  </aside>
-  <button id="sidebar-left-tab" class="sidebar-tab sidebar-tab--left" type="button" hidden>
-    <svg class="icon" aria-hidden="true"><use href="#icon-speed"/></svg>
-  </button>
-
-  <aside id="right-sidebar" class="sidebar sidebar--right">
-    <div class="sidebar__header">
-      <div class="sidebar__heading">Camera Pose</div>
-      <button id="toggle-right" class="sidebar__close" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
-    </div>
-    <div class="sidebar__body">
-      <section id="manifest-panel" class="sidebar__section" style="display:none;">
-        <div class="sidebar__label">Manifest Status</div>
-        <div class="slider-row">
-          <div class="slider-row__head"><span>Current Phase</span></div>
-          <div class="phase-control">
-            <select id="phase-select" class="field-input"><option value="">(none)</option></select>
-            <input id="phase-custom" class="field-input" type="text" placeholder="Custom phase...">
+        <div class="info-panel__pane" data-pane="scene">
+          <div class="info-panel__field"><span class="info-panel__field-label">Name</span><input id="scene-info-name" class="field-input" type="text" value="--" readonly></div>
+          <div class="info-panel__field"><span class="info-panel__field-label">Path</span><input id="scene-info-path" class="field-input" type="text" value="--" readonly></div>
+          <div class="info-panel__stats">
+            <div class="info-panel__field"><span class="info-panel__field-label">Type</span><span class="info-panel__field-value" id="scene-info-type">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">Gaussians</span><span class="info-panel__field-value" id="scene-info-gaussians">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">VRAM</span><span class="info-panel__field-value" id="scene-info-vram">--</span></div>
           </div>
+          <details class="info-panel__advanced">
+            <summary>Manifest</summary>
+            <div class="info-panel__advanced-body">
+              <section id="manifest-panel" class="sidebar__section" style="display:none;">
+                <div class="sidebar__label">Manifest Status</div>
+                <div class="slider-row">
+                  <div class="slider-row__head"><span>Current Phase</span></div>
+                  <div class="phase-control">
+                    <select id="phase-select" class="field-input"><option value="">(none)</option></select>
+                    <input id="phase-custom" class="field-input" type="text" placeholder="Custom phase...">
+                  </div>
+                </div>
+                <label class="slider-row">
+                  <div class="slider-row__head"><span>Total Assets</span></div>
+                  <input id="total-assets" class="field-input" type="text" value="--" readonly>
+                </label>
+                <div class="pose-buttons">
+                  <button id="apply-phase" class="pose-buttons__primary" type="button">Apply Phase</button>
+                  <button id="toggle-health-poll" class="pose-buttons__secondary" type="button">Start Health Poll</button>
+                </div>
+                <div class="streaming-stats">
+                  <label><span>Required GPU</span><input id="stat-required-gpu" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Warm CPU</span><input id="stat-warm-cpu" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Pending Disk</span><input id="stat-pending-disk" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Pending Upload</span><input id="stat-pending-upload" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Pending Evict</span><input id="stat-pending-evict" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>CPU Resident</span><input id="stat-cpu-resident" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>GPU Resident</span><input id="stat-gpu-resident" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Swap Hits</span><input id="stat-swap-hits" class="field-input" type="text" value="--" readonly></label>
+                  <label><span>Swap Misses</span><input id="stat-swap-misses" class="field-input" type="text" value="--" readonly></label>
+                </div>
+              </section>
+            </div>
+          </details>
         </div>
-        <label class="slider-row">
-          <div class="slider-row__head"><span>Total Assets</span></div>
-          <input id="total-assets" class="field-input" type="text" value="--" readonly>
-        </label>
-        <div class="pose-buttons">
-          <button id="apply-phase" class="pose-buttons__primary" type="button">Apply Phase</button>
-          <button id="toggle-health-poll" class="pose-buttons__secondary" type="button">Start Health Poll</button>
+      </div>
+    </aside>
+    <section id="file-panel" class="file-panel" hidden role="dialog" aria-modal="false" aria-labelledby="file-panel-title">
+      <div class="file-panel__header">
+        <div class="file-panel__header-title"><svg class="icon"><use href="#icon-folder"/></svg><span id="file-panel-title">Content Browser</span><span class="file-panel__current-path" id="browse-current-path-display">/</span></div>
+        <div class="file-panel__header-actions">
+          <div class="file-panel__search-controls"><input id="browse-search" class="field-input file-panel__search-input" type="text" placeholder="Search loadable scenes or manifests"><button id="browse-search-submit" class="file-panel__header-btn" type="button">Search</button><button id="browse-search-clear" class="file-panel__header-btn" type="button">Clear</button></div>
+          <button id="browse-root" class="file-panel__header-btn" type="button"><svg class="icon"><use href="#icon-folder"/></svg>Root</button>
+          <button id="browse-up" class="file-panel__header-btn" type="button"><svg class="icon"><use href="#icon-up"/></svg>Up</button>
+          <button id="browse-refresh" class="file-panel__header-btn" type="button"><svg class="icon"><use href="#icon-refresh"/></svg>Refresh</button>
+          <button id="scenes-close" class="file-panel__close" type="button" aria-label="Close scenes browser"><svg class="icon"><use href="#icon-close"/></svg></button>
         </div>
-        <div class="streaming-stats">
-          <label><span>Required GPU</span><input id="stat-required-gpu" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Warm CPU</span><input id="stat-warm-cpu" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Pending Disk</span><input id="stat-pending-disk" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Pending Upload</span><input id="stat-pending-upload" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Pending Evict</span><input id="stat-pending-evict" class="field-input" type="text" value="--" readonly></label>
-          <label><span>CPU Resident</span><input id="stat-cpu-resident" class="field-input" type="text" value="--" readonly></label>
-          <label><span>GPU Resident</span><input id="stat-gpu-resident" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Swap Hits</span><input id="stat-swap-hits" class="field-input" type="text" value="--" readonly></label>
-          <label><span>Swap Misses</span><input id="stat-swap-misses" class="field-input" type="text" value="--" readonly></label>
-        </div>
-      </section>
-
-      <div class="sidebar__section">
-        <div class="sidebar__label">Position</div>
-        <input id="position" class="field-input" type="text" value="[0, 0, 0]">
       </div>
-      <div class="sidebar__section">
-        <div class="sidebar__label">Forward</div>
-        <input id="forward" class="field-input" type="text" value="[0, 0, -1]">
-      </div>
-      <div class="sidebar__section">
-        <div class="sidebar__label">Up</div>
-        <input id="up" class="field-input" type="text" value="[0, 1, 0]">
-      </div>
-      <div class="sidebar__section">
-        <div class="sidebar__label">FOV Y</div>
-        <input id="fovy" class="field-input" type="text" value="0.78539816339">
-      </div>
-      <div class="sidebar__section">
-        <div class="sidebar__label">Message Type</div>
-        <input id="message-type" class="field-input" type="text" value="set_camera_pose" readonly>
-      </div>
-      <div class="pose-buttons">
-        <button id="format-payload" class="pose-buttons__secondary" type="button">Format</button>
-        <button id="send-payload" class="pose-buttons__primary" type="button">Send Payload</button>
-      </div>
-      <div class="sidebar__section">
-        <div class="sidebar__label">Live Pose (JSON)</div>
-        <pre class="live-pose-preview" id="live-pose-preview" aria-hidden="true"></pre>
-      </div>
-      <details class="payload-disclosure">
-        <summary>Show raw JSON</summary>
-        <textarea id="payload" rows="10"></textarea>
-      </details>
-    </div>
-  </aside>
-  <button id="sidebar-right-tab" class="sidebar-tab sidebar-tab--right" type="button" hidden>
-    <svg class="icon" aria-hidden="true"><use href="#icon-pose"/></svg>
-  </button>
-
-  <button id="toggle-file-panel" class="file-panel__toggle" type="button" aria-expanded="false">
-    <svg class="icon" aria-hidden="true"><use href="#icon-layers"/></svg>
-    <span>Browse Scenes</span>
-    <span class="file-panel__toggle-dot"><svg class="icon" aria-hidden="true"><use href="#icon-chev-up"/></svg></span>
-  </button>
-
-  <section id="file-panel" class="file-panel" hidden>
-    <div class="file-panel__header">
-      <div class="file-panel__header-title">
-        <svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>
-        <span>Content Browser</span>
-        <span class="file-panel__current-path" id="browse-current-path-display">/</span>
-      </div>
-      <div class="file-panel__header-actions">
-        <div class="file-panel__search-controls">
-          <input id="browse-search" class="field-input file-panel__search-input" type="text" placeholder="Search loadable scenes or manifests">
-          <button id="browse-search-submit" class="file-panel__header-btn" type="button">Search</button>
-          <button id="browse-search-clear" class="file-panel__header-btn" type="button">Clear</button>
-        </div>
-        <button id="browse-root" class="file-panel__header-btn" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-folder"/></svg>Root</button>
-        <button id="browse-up" class="file-panel__header-btn" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-up"/></svg>Up</button>
-        <button id="browse-refresh" class="file-panel__header-btn" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg>Refresh</button>
-      </div>
-    </div>
-    <div class="file-panel__body"><div id="browse-entry-list"></div></div>
-    <input type="text" id="browse-current-path" readonly hidden>
-    <input type="text" id="browse-parent-path" readonly hidden>
-    <div class="file-panel__selected-meta">
-      <label><span>Selected Path</span><input id="browse-selected-path" class="field-input" type="text" readonly></label>
-      <label><span>Kind</span><input id="browse-selected-kind" class="field-input" type="text" readonly></label>
-      <label><span>Load As</span><input id="browse-selected-loadable" class="field-input" type="text" readonly></label>
-    </div>
-    <div class="file-panel__footer">
-      <p id="browse-status" class="file-panel__footer-status">Browse the server filesystem and choose a model directory or manifest.</p>
-      <button id="load-selected" class="file-panel__load-btn" type="button" disabled>Load Selected</button>
-    </div>
-  </section>
-
-  <p id="status-line" class="status-line-legacy" hidden></p>
-  <script src="app.js"></script>
+      <div class="file-panel__body"><div id="browse-entry-list"></div></div>
+      <input type="text" id="browse-current-path" readonly hidden>
+      <input type="text" id="browse-parent-path" readonly hidden>
+      <div class="file-panel__selected-meta"><label><span>Selected Path</span><input id="browse-selected-path" class="field-input" type="text" readonly></label><label><span>Kind</span><input id="browse-selected-kind" class="field-input" type="text" readonly></label><label><span>Load As</span><input id="browse-selected-loadable" class="field-input" type="text" readonly></label></div>
+      <div class="file-panel__footer"><p id="browse-status" class="file-panel__footer-status">Browse the server filesystem and choose a model directory or manifest.</p><button id="load-selected" class="file-panel__load-btn" type="button" disabled>Load Selected</button></div>
+    </section>
+    <button id="toggle-file-panel" class="file-panel__toggle" type="button" aria-expanded="false"><svg class="icon"><use href="#icon-layers"/></svg><span>Browse Scenes</span><span class="file-panel__toggle-dot"><svg class="icon"><use href="#icon-chev-up"/></svg></span></button>
+    <p id="status-line" class="status-line-legacy" hidden></p>
+    <script src="app.js"></script>
+  </div>
 </body>
 </html>

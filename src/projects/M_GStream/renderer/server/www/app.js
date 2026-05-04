@@ -57,6 +57,98 @@ function $(id) {
   return document.getElementById(id);
 }
 
+const TWEAK_DEFAULTS = { theme: "dark", sidebarWidth: 220 };
+const STATE_DEFAULTS = { activePanel: "sidebar" };
+
+function loadJson(key, def) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return { ...def };
+    const parsed = JSON.parse(raw);
+    return { ...def, ...parsed };
+  } catch (_) { return { ...def }; }
+}
+function saveJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* no-op */ }
+}
+
+const tweaks = loadJson("mgstream-tweaks", TWEAK_DEFAULTS);
+const persisted = loadJson("mgstream-state", STATE_DEFAULTS);
+const uiState = {
+  theme: tweaks.theme === "light" ? "light" : "dark",
+  sidebarWidth: Math.max(160, Math.min(300, Number(tweaks.sidebarWidth) || 220)),
+  activePanel: ["sidebar", "viewer", "scenes"].includes(persisted.activePanel) ? persisted.activePanel : "sidebar",
+  infoTab: "connection",
+  infoPanelCollapsed: false,
+};
+
+function applyTheme(theme) {
+  uiState.theme = theme === "light" ? "light" : "dark";
+  const root = $("app");
+  if (root) {
+    root.classList.toggle("theme-dark", uiState.theme === "dark");
+    root.classList.toggle("theme-light", uiState.theme === "light");
+  }
+  const themeBtn = $("theme-toggle");
+  if (themeBtn) themeBtn.textContent = uiState.theme === "dark" ? "☾" : "☀";
+  saveJson("mgstream-tweaks", { theme: uiState.theme, sidebarWidth: uiState.sidebarWidth });
+  if (typeof updateStatusChip === "function") updateStatusChip();
+}
+
+const ACTIVE_PANEL_LABEL = {
+  sidebar: { icon: "⌨", text: "Camera Control · Keyboard active" },
+  viewer:  { icon: "▶", text: "Viewer · Keyboard navigation" },
+  scenes:  { icon: "⊞", text: "Browse Scenes · Panel active" },
+};
+
+function updateActivePanelPill() {
+  const pill = document.getElementById("active-panel-pill");
+  if (!pill) return;
+  const label = ACTIVE_PANEL_LABEL[uiState.activePanel];
+  if (!label) { pill.hidden = true; return; }
+  pill.hidden = false;
+  const icon = document.getElementById("active-panel-pill-icon");
+  const text = document.getElementById("active-panel-pill-text");
+  if (icon) icon.textContent = label.icon;
+  if (text) text.textContent = label.text;
+}
+
+function setActivePanel(next) {
+  if (!["sidebar", "viewer", "scenes"].includes(next)) return;
+  uiState.activePanel = next;
+  saveJson("mgstream-state", { activePanel: next });
+  const root = $("app");
+  if (root) root.dataset.activePanel = next;
+  const targets = {
+    sidebar: document.getElementById("left-sidebar"),
+    viewer:  document.getElementById("stream-stage"),
+    scenes:  document.getElementById("file-panel"),
+  };
+  Object.entries(targets).forEach(([key, el]) => {
+    if (!el) return;
+    el.classList.toggle("panel-focus-ring", key === next);
+    el.classList.toggle("is-active", key === next);
+  });
+  updateActivePanelPill();
+}
+
+function setInfoTab(tab) {
+  if (!["connection", "camera", "scene"].includes(tab)) return;
+  uiState.infoTab = tab;
+  document.querySelectorAll(".info-panel__tab").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.tab === tab);
+  });
+  document.querySelectorAll(".info-panel__pane").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.pane === tab);
+  });
+}
+
+function setInfoPanelCollapsed(collapsed) {
+  uiState.infoPanelCollapsed = Boolean(collapsed);
+  const panel = document.getElementById("info-panel");
+  if (panel) panel.classList.toggle("is-collapsed", uiState.infoPanelCollapsed);
+}
+
 function currentHttpOrigin() {
   if (window.location.origin && window.location.origin !== "null") {
     return window.location.origin;
@@ -94,11 +186,54 @@ function setStatus(text, isError = false) {
   updateStatusChip();
 }
 
+const STATUS_COLORS = {
+  dark: { connected: "#4d9e6e", disconnected: "#a05050", connecting: "#a08a3a", streaming: "#4d7fc4" },
+  light: { connected: "#2f7a4f", disconnected: "#b84242", connecting: "#a07a1e", streaming: "#2a6bc0" },
+};
+
+function currentWsStatus() {
+  if (!state.socket) return "disconnected";
+  switch (state.socket.readyState) {
+    case WebSocket.CONNECTING: return "connecting";
+    case WebSocket.OPEN: return state.statusError ? "disconnected" : "connected";
+    default: return "disconnected";
+  }
+}
+
 function updateStatusChip() {
   const chip = document.getElementById("status-chip");
   if (!chip) return;
-  const ok = !state.statusError && state.socket && state.socket.readyState === WebSocket.OPEN;
-  chip.classList.remove("topbar__chip--status--live", "topbar__chip--status--down"); chip.classList.add(ok ? "topbar__chip--status--live" : "topbar__chip--status--down");
+  const ws = currentWsStatus();
+  const streamOpen = ($("toggle-stream") || {}).dataset && $("toggle-stream").dataset.state === "open";
+  const status = streamOpen && ws !== "disconnected" ? "streaming" : ws;
+  const live = status === "connected" || status === "streaming" || status === "connecting";
+  chip.classList.remove("topbar__chip--status--live", "topbar__chip--status--down");
+  chip.classList.add(live ? "topbar__chip--status--live" : "topbar__chip--status--down");
+  const dot = document.getElementById("status-dot");
+  if (dot) {
+    const palette = STATUS_COLORS[uiState.theme] || STATUS_COLORS.dark;
+    dot.style.background = palette[status] || palette.disconnected;
+    dot.style.boxShadow = `0 0 6px ${palette[status] || palette.disconnected}`;
+    dot.classList.toggle("is-pulsing", status === "connecting" || status === "streaming");
+  }
+  const wsBtn = document.getElementById("connect-ws");
+  if (wsBtn) {
+    wsBtn.classList.toggle("is-connected", ws === "connected");
+    wsBtn.dataset.connected = ws === "connected" ? "true" : "false";
+    const label = wsBtn.querySelector("span");
+    if (label) label.textContent = ws === "connected" ? "Disconnect WS" : (ws === "connecting" ? "Connecting…" : "Connect WS");
+  }
+  const chipText = document.getElementById("status-chip-text");
+  if (chipText) {
+    const labels = { connected: "Connected", disconnected: "Disconnected", connecting: "Connecting…", streaming: "Streaming" };
+    chipText.textContent = labels[status] || "Disconnected";
+  }
+  const streamBtn = document.getElementById("toggle-stream");
+  if (streamBtn) {
+    const open = streamBtn.dataset.state === "open";
+    streamBtn.classList.toggle("is-open", open);
+  }
+  updateActivePanelPill();
 }
 
 function setBrowseStatus(text, isError = false) {
@@ -109,8 +244,21 @@ function setBrowseStatus(text, isError = false) {
 
 function setCameraControlButtonState(active) {
   const button = $("toggle-camera");
-  button.textContent = active ? "Disable Camera Control" : "Enable Camera Control";
+  const label = button.querySelector("span");
+  if (label) {
+    label.textContent = active ? "Camera Control ON" : "Camera Control OFF";
+  } else {
+    button.textContent = active ? "Camera Control ON" : "Camera Control OFF";
+  }
   button.classList.toggle("active", active);
+  button.setAttribute("aria-pressed", active ? "true" : "false");
+  const pill = document.getElementById("camera-state-pill");
+  if (pill) {
+    pill.textContent = active ? "ENABLED" : "DISABLED";
+    pill.classList.toggle("info-panel__pill--enabled", active);
+    pill.classList.toggle("info-panel__pill--disabled", !active);
+  }
+  if (active) setActivePanel("sidebar");
 }
 
 function setHealthPollButtonState(active) {
@@ -1425,10 +1573,6 @@ function applyDefaults() {
   clearBrowseSelectionFields();
   $("left-sidebar").classList.add("sidebar--open");
   $("sidebar-left-tab").hidden = true;
-  $("right-sidebar").classList.remove("sidebar--open");
-  $("sidebar-right-tab").hidden = false;
-  $("conn-dropdown").hidden = true;
-  $("toggle-conn").setAttribute("aria-expanded", "false");
   $("file-panel").hidden = true;
   $("toggle-file-panel").classList.remove("is-open");
   $("toggle-file-panel").setAttribute("aria-expanded", "false");
@@ -1464,7 +1608,12 @@ function bindActions() {
   });
   $("connect-ws").addEventListener("click", () => {
     try {
-      connectSocket();
+      if (currentWsStatus() === "connected") {
+        disconnectSocket();
+        setStatus("WebSocket: disconnected");
+      } else {
+        connectSocket();
+      }
     } catch (error) {
       setStatus(error.message, true);
     }
@@ -1562,36 +1711,73 @@ function bindActions() {
     }
   });
 
-  $("toggle-conn").addEventListener("click", (event) => {
-    const dropdown = $("conn-dropdown"); dropdown.hidden = !dropdown.hidden;
-    event.currentTarget.setAttribute("aria-expanded", dropdown.hidden ? "false" : "true");
-  });
   $("toggle-stream").addEventListener("click", () => {
     const btn = $("toggle-stream"); const currentState = btn.dataset.state || "closed";
     if (currentState === "closed") {
-      try { openStream(); btn.dataset.state = "open"; btn.textContent = "⏹ Stop Stream"; } catch (error) { setStatus(error.message, true); }
+      try { openStream(); btn.dataset.state = "open"; btn.textContent = "⏹ Stop Stream"; btn.classList.add("is-open"); }
+      catch (error) { setStatus(error.message, true); }
     } else {
-      $("stream-preview").src = ""; btn.dataset.state = "closed"; btn.textContent = "▶ Open Stream"; setStatus("Stream closed.");
+      $("stream-preview").src = ""; btn.dataset.state = "closed"; btn.textContent = "▶ Open Stream"; btn.classList.remove("is-open"); setStatus("Stream closed.");
     }
+    updateStatusChip();
   });
   $("toggle-left").addEventListener("click", () => {
     const sidebar = $("left-sidebar"); const tab = $("sidebar-left-tab"); tab.hidden = sidebar.classList.toggle("sidebar--open");
   });
   $("sidebar-left-tab").addEventListener("click", () => { $("left-sidebar").classList.add("sidebar--open"); $("sidebar-left-tab").hidden = true; });
-  $("toggle-right").addEventListener("click", () => {
-    const sidebar = $("right-sidebar"); const tab = $("sidebar-right-tab"); tab.hidden = sidebar.classList.toggle("sidebar--open");
-  });
-  $("sidebar-right-tab").addEventListener("click", () => { $("right-sidebar").classList.add("sidebar--open"); $("sidebar-right-tab").hidden = true; });
+
   $("toggle-file-panel").addEventListener("click", (event) => {
     const panel = $("file-panel");
     const willOpen = panel.hidden;
     panel.hidden = !panel.hidden;
-    event.currentTarget.classList.toggle("is-open", !panel.hidden); event.currentTarget.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
-    if (willOpen && !state.browse.currentPath) {
-      browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
+    event.currentTarget.classList.toggle("is-open", !panel.hidden);
+    event.currentTarget.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    if (willOpen) {
+      setActivePanel("scenes");
+      if (!state.browse.currentPath) {
+        browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
+      }
+    } else {
+      setActivePanel("sidebar");
     }
   });
+
+  // Theme toggle
+  const themeBtn = $("theme-toggle");
+  if (themeBtn) themeBtn.addEventListener("click", () => applyTheme(uiState.theme === "dark" ? "light" : "dark"));
+
+  // InfoPanel tabs + collapse/expand
+  document.querySelectorAll(".info-panel__tab").forEach((el) => {
+    el.addEventListener("click", (event) => { event.stopPropagation(); setInfoTab(el.dataset.tab); });
+  });
+  const infoClose = $("info-panel-close");
+  if (infoClose) infoClose.addEventListener("click", (event) => { event.stopPropagation(); setInfoPanelCollapsed(true); });
+  const infoExpand = $("info-panel-expand");
+  if (infoExpand) infoExpand.addEventListener("click", (event) => { event.stopPropagation(); setInfoPanelCollapsed(false); });
+
+  // Scenes browser close (modal)
+  const scenesClose = $("scenes-close");
+  if (scenesClose) scenesClose.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const panel = $("file-panel");
+    panel.hidden = true;
+    const fab = $("toggle-file-panel");
+    fab.classList.remove("is-open");
+    fab.setAttribute("aria-expanded", "false");
+    setActivePanel("sidebar");
+  });
+
+  // Click delegation for activePanel selection.
+  const sidebarEl = $("left-sidebar");
+  if (sidebarEl) sidebarEl.addEventListener("mousedown", () => setActivePanel("sidebar"));
+  const stage = $("stream-stage");
+  if (stage) stage.addEventListener("mousedown", () => setActivePanel("viewer"));
+  const filePanel = $("file-panel");
+  if (filePanel) filePanel.addEventListener("mousedown", () => setActivePanel("scenes"));
 }
 
 bindActions();
+applyTheme(uiState.theme);
+setInfoTab(uiState.infoTab);
+setActivePanel(uiState.activePanel);
 applyDefaults();

@@ -251,8 +251,9 @@ void MjpegStreamer::drainReadyReadbacks()
         frame->control_sequence = slot.control_sequence;
         frame->width = slot.width;
         frame->height = slot.height;
-        // The final render target is already in display orientation after the renderer copy pass.
-        frame->bottom_up = false;
+        // glReadPixels returns rows from the OpenGL lower-left origin.
+        // Keep this marked bottom-up so the encoder converts it to top-down JPEG order.
+        frame->bottom_up = true;
         frame->capture_submit_time = slot.capture_submit_time;
         frame->raw_ready_time = std::chrono::steady_clock::now();
         frame->capture_submit_wall_time = slot.capture_submit_wall_time;

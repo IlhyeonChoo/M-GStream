@@ -1226,11 +1226,11 @@ class CameraController {
       moved = true;
     }
     if (this.keysPressed.KeyA && vectorNorm(moveRight) > MIN_VECTOR_NORM) {
-      position = vec3Sub(position, vec3Scale(moveRight, moveAmount));
+      position = vec3Add(position, vec3Scale(moveRight, moveAmount));
       moved = true;
     }
     if (this.keysPressed.KeyD && vectorNorm(moveRight) > MIN_VECTOR_NORM) {
-      position = vec3Add(position, vec3Scale(moveRight, moveAmount));
+      position = vec3Sub(position, vec3Scale(moveRight, moveAmount));
       moved = true;
     }
     if (this.keysPressed.KeyQ) {
@@ -1268,10 +1268,10 @@ class CameraController {
     };
 
     if (this.keysPressed.KeyJ) {
-      applyYaw(rotateAmount);
+      applyYaw(-rotateAmount);
     }
     if (this.keysPressed.KeyL) {
-      applyYaw(-rotateAmount);
+      applyYaw(rotateAmount);
     }
     if (this.keysPressed.KeyI) {
       applyPitch(-rotateAmount);
@@ -1280,10 +1280,10 @@ class CameraController {
       applyPitch(rotateAmount);
     }
     if (this.keysPressed.KeyU) {
-      applyRoll(rotateAmount);
+      applyRoll(-rotateAmount);
     }
     if (this.keysPressed.KeyO) {
-      applyRoll(-rotateAmount);
+      applyRoll(rotateAmount);
     }
 
     if (moved) {

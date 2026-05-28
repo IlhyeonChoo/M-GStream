@@ -101,7 +101,7 @@ namespace sibr {
 		: owner(p_owner), ViewBase(render_w, render_h) {
 
 		copyRenderer = new BufferCopyRenderer();
-		copyRenderer->flip() = true;
+		copyRenderer->flip() = false;
 		copyRenderer->width() = render_w;
 		copyRenderer->height() = render_h;
 
@@ -169,6 +169,7 @@ namespace sibr {
 		// Convert view and projection to target coordinate system
 		auto view_mat = eye.view();
 		auto proj_mat = eye.viewproj();
+		view_mat.row(0) *= -1;
 		view_mat.row(1) *= -1;
 		view_mat.row(2) *= -1;
 		proj_mat.row(1) *= -1;
@@ -505,4 +506,3 @@ namespace sibr {
 	}
 
 }
-

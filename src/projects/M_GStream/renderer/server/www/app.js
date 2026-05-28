@@ -538,7 +538,24 @@ function updateLoadStatePanel(renderer) {
   const loadedFileChipText = $("loaded-file-chip-text"); if (loadedFileChipText) loadedFileChipText.textContent = basenameOf(state.rendererStatus.loaded_source_path);
 }
 
+function syncRendererCameraPose(renderer, allowActiveController = false) {
+  if (!renderer || !renderer.camera_pose_available || !renderer.camera_pose) {
+    return;
+  }
+
+  const controller = state.cameraController;
+  if (controller && controller.active && !allowActiveController) {
+    return;
+  }
+
+  syncPoseUi(renderer.camera_pose);
+  if (controller) {
+    controller.initFromPose(renderer.camera_pose);
+  }
+}
+
 function applyRendererState(renderer) {
+  syncRendererCameraPose(renderer, false);
   updateManifestPanel(renderer ? {
     has_manifest: renderer.has_manifest,
     current_phase: renderer.current_phase,
@@ -632,6 +649,7 @@ function startLoadWatch(sequence) {
       }
       clearLoadWatch();
       if (renderer.load_state === "loaded") {
+        syncRendererCameraPose(renderer, true);
         setStatus(`Content loaded (seq=${sequence}).`);
       } else {
         setStatus(`Load failed (seq=${sequence}): ${renderer.last_load_error || "unknown error"}`, true);
@@ -1127,7 +1145,7 @@ class CameraController {
     this.forward = basis.forward;
     this.up = basis.up;
     this.fovy = payloadObject.fovy;
-    this.dirty = true;
+    this.dirty = false;
   }
 
   getPose() {
@@ -1371,7 +1389,7 @@ class CameraController {
 
     this.lastFrameTime = null;
     this.lastSendTime = 0;
-    this.dirty = true;
+    this.dirty = false;
     this.active = true;
     this.animFrameId = requestAnimationFrame(this.boundTick);
   }
@@ -1520,7 +1538,7 @@ function sendPayload() {
   setStatus("Control payload sent.");
 }
 
-function toggleCameraControl() {
+async function toggleCameraControl() {
   ensureSocketConnected();
 
   if (!state.cameraController) {
@@ -1534,6 +1552,8 @@ function toggleCameraControl() {
     setStatus("Camera control disabled.");
     return;
   }
+
+  await pollHealthz();
 
   const pose = {
     position: parseVectorInput($("position").value),
@@ -1672,11 +1692,9 @@ function bindActions() {
     }
   });
   $("toggle-camera").addEventListener("click", () => {
-    try {
-      toggleCameraControl();
-    } catch (error) {
+    toggleCameraControl().catch((error) => {
       setStatus(error.message, true);
-    }
+    });
   });
   $("apply-phase").addEventListener("click", () => {
     try {

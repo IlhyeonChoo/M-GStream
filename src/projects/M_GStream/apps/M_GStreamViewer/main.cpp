@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include <core/graphics/Window.hpp>
 #include <core/system/CommandLineArgs.hpp>
@@ -42,6 +43,70 @@ const char* loadContentSourceKindName(LoadContentSourceKind kind)
         return "manifest";
     }
     return "unknown";
+}
+
+std::string basenameFromPath(const std::string& path)
+{
+    if (path.empty()) {
+        return {};
+    }
+    const size_t end = path.find_last_not_of("/\\");
+    if (end == std::string::npos) {
+        return {};
+    }
+    const size_t begin = path.find_last_of("/\\", end);
+    const size_t start = begin == std::string::npos ? 0 : begin + 1;
+    return path.substr(start, end - start + 1);
+}
+
+void fillSceneSummary(RendererHealthSnapshot& snapshot, const MGStreamViewer& viewer, const RenderingSystem* rendering_system)
+{
+    snapshot.scene_path = viewer.getLoadedContentPath();
+    snapshot.scene_source_kind = viewer.getLoadedContentKind();
+    snapshot.scene_name = basenameFromPath(snapshot.scene_path);
+    if (snapshot.scene_name.empty()) {
+        snapshot.scene_name = snapshot.scene_path;
+    }
+
+    if (const GaussianScene* scene = viewer.getScene()) {
+        snapshot.scene_instance_count = scene->getInstances().size();
+    }
+
+    if (!rendering_system) {
+        return;
+    }
+
+    const RenderGaussianScene* render_scene = rendering_system->getScene();
+    if (render_scene) {
+        std::unordered_set<std::string> counted_gpu_assets;
+        for (const auto& pair : render_scene->getInstances()) {
+            const RenderGaussianInstance* render_instance = pair.second.get();
+            if (!render_instance) {
+                continue;
+            }
+
+            const GPUGaussianField* gpu_field = render_instance->getGPUField();
+            if (!gpu_field) {
+                continue;
+            }
+
+            ++snapshot.scene_renderable_instance_count;
+            snapshot.scene_gaussian_count += static_cast<uint64_t>(std::max(gpu_field->count, 0));
+            if (!gpu_field->asset_id.empty() && counted_gpu_assets.insert(gpu_field->asset_id).second) {
+                snapshot.scene_gpu_asset_bytes += GPUResourceManager::getInstance().gpuBytes(gpu_field->asset_id);
+            }
+        }
+    }
+
+    if (const GaussianView* view = rendering_system->getView("Gaussian View")) {
+        snapshot.scene_view_buffer_bytes = view->worldBufferBytes();
+        snapshot.scene_scratch_buffer_bytes = view->scratchBufferBytes();
+        snapshot.scene_output_buffer_bytes = view->outputInteropBytes();
+    }
+    snapshot.scene_vram_bytes = snapshot.scene_gpu_asset_bytes
+        + snapshot.scene_view_buffer_bytes
+        + snapshot.scene_scratch_buffer_bytes
+        + snapshot.scene_output_buffer_bytes;
 }
 #endif
 
@@ -95,6 +160,7 @@ RendererHealthSnapshot makeRendererHealthSnapshot(const MGStreamViewer& viewer)
     snapshot.load_state = viewer.getLoadState();
     snapshot.last_load_error = viewer.getLastLoadError();
     snapshot.last_load_sequence = viewer.getLastLoadSequence();
+    fillSceneSummary(snapshot, viewer, rendering_system);
 
     if (rendering_system != nullptr) {
         if (const SwapManager::Stats* swap = rendering_system->getSwapStats()) {

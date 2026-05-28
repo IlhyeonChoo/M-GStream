@@ -5,6 +5,12 @@ const state = {
   loadWatchTimer: null,
   statusError: false,
   manifestInfo: null,
+  health: {
+    lastPayload: null,
+    lastRendererSample: null,
+    lastOkUnixMs: 0,
+    error: "",
+  },
   browse: {
     currentPath: "",
     parentPath: "",
@@ -36,6 +42,7 @@ const DEFAULT_MOVE_SPEED = 0.6;
 const DEFAULT_ROTATE_SPEED = 30.0;
 const DEFAULT_MOUSE_SENSITIVITY = 0.15;
 const DEFAULT_SEND_INTERVAL_MS = 33;
+const HEALTH_POLL_INTERVAL_MS = 1000;
 const WHEEL_ZOOM_FACTOR = 0.002;
 const WORLD_UP = [0, 1, 0];
 const CONTROL_KEY_CODES = new Set([
@@ -195,7 +202,7 @@ function currentWsStatus() {
   if (!state.socket) return "disconnected";
   switch (state.socket.readyState) {
     case WebSocket.CONNECTING: return "connecting";
-    case WebSocket.OPEN: return state.statusError ? "disconnected" : "connected";
+    case WebSocket.OPEN: return "connected";
     default: return "disconnected";
   }
 }
@@ -205,7 +212,7 @@ function updateStatusChip() {
   if (!chip) return;
   const ws = currentWsStatus();
   const streamOpen = ($("toggle-stream") || {}).dataset && $("toggle-stream").dataset.state === "open";
-  const status = streamOpen && ws !== "disconnected" ? "streaming" : ws;
+  const status = state.statusError ? "disconnected" : (streamOpen && ws !== "disconnected" ? "streaming" : ws);
   const live = status === "connected" || status === "streaming" || status === "connecting";
   chip.classList.remove("topbar__chip--status--live", "topbar__chip--status--down");
   chip.classList.add(live ? "topbar__chip--status--live" : "topbar__chip--status--down");
@@ -234,6 +241,7 @@ function updateStatusChip() {
     streamBtn.classList.toggle("is-open", open);
   }
   updateActivePanelPill();
+  if (typeof updateConnectionPanel === "function") updateConnectionPanel();
 }
 
 function setBrowseStatus(text, isError = false) {
@@ -279,6 +287,61 @@ function formatBytes(bytes) {
     return "--";
   }
   return `${(numeric / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function setText(id, value, title = null) {
+  const element = $(id);
+  if (!element) return;
+  const text = value === undefined || value === null || value === "" ? "--" : String(value);
+  element.textContent = text;
+  if (title !== null) {
+    element.title = String(title);
+  }
+}
+
+function setInputValue(id, value) {
+  const element = $(id);
+  if (!element) return;
+  const text = value === undefined || value === null || value === "" ? "--" : String(value);
+  element.value = text;
+  element.title = text;
+}
+
+function setInputTitle(id, value) {
+  const element = $(id);
+  if (!element) return;
+  element.title = value === undefined || value === null ? "" : String(value);
+}
+
+function formatFixed(value, digits, fallback = "--") {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(digits) : fallback;
+}
+
+function formatInteger(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric).toLocaleString("en-US") : "--";
+}
+
+function formatCompactCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return "--";
+  if (numeric >= 1_000_000_000) return `${(numeric / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "")}B`;
+  if (numeric >= 1_000_000) return `${(numeric / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
+  if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(1).replace(/\.?0+$/, "")}K`;
+  return String(Math.round(numeric));
+}
+
+function formatDuration(seconds) {
+  const numeric = Number(seconds);
+  if (!Number.isFinite(numeric) || numeric < 0) return "--";
+  const totalSeconds = Math.floor(numeric);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m ${String(secs).padStart(2, "0")}s`;
+  return `${secs}s`;
 }
 
 function parseVectorInput(text) {
@@ -366,6 +429,38 @@ function fallbackUpHint(forwardVector) {
   return bestCandidate.slice();
 }
 
+function radiansToDegrees(value) {
+  return value * 180.0 / Math.PI;
+}
+
+function cameraRotationFromPose(pose) {
+  const forward = vec3Normalize(pose.forward || [0, 0, -1]);
+  const up = vec3Normalize(pose.up || [0, 1, 0]);
+  if (vectorNorm(forward) <= MIN_VECTOR_NORM || vectorNorm(up) <= MIN_VECTOR_NORM) {
+    return null;
+  }
+
+  const yaw = radiansToDegrees(Math.atan2(forward[0], -forward[2]));
+  const horizontal = Math.sqrt(forward[0] * forward[0] + forward[2] * forward[2]);
+  const pitch = radiansToDegrees(Math.atan2(forward[1], horizontal));
+
+  let referenceUp = WORLD_UP;
+  if (Math.abs(dot(forward, referenceUp)) >= PARALLEL_THRESHOLD) {
+    referenceUp = fallbackUpHint(forward);
+  }
+  let referenceRight = vec3Normalize(vec3Cross(forward, referenceUp));
+  if (vectorNorm(referenceRight) <= MIN_VECTOR_NORM) {
+    referenceRight = [1, 0, 0];
+  }
+  const referenceCameraUp = vec3Normalize(vec3Cross(referenceRight, forward));
+  const roll = radiansToDegrees(Math.atan2(
+    dot(vec3Cross(referenceCameraUp, up), forward),
+    dot(referenceCameraUp, up)
+  ));
+
+  return { yaw, pitch, roll };
+}
+
 function normalizeWheelDelta(event) {
   if (event.deltaMode === 1) {
     return event.deltaY * 16.0;
@@ -439,9 +534,57 @@ function syncPayloadTextareaFromPose(pose) {
   const prev = document.getElementById("live-pose-preview"); if (prev) prev.textContent = $("payload").value;
 }
 
+function updateCameraInfoFromPose(pose) {
+  if (!pose || !Array.isArray(pose.position)) {
+    ["cam-pos-x", "cam-pos-y", "cam-pos-z", "cam-rot-yaw", "cam-rot-pitch", "cam-rot-roll"].forEach((id) => setText(id, "--"));
+    return;
+  }
+
+  setText("cam-pos-x", formatFixed(pose.position[0], 3));
+  setText("cam-pos-y", formatFixed(pose.position[1], 3));
+  setText("cam-pos-z", formatFixed(pose.position[2], 3));
+
+  const rotation = cameraRotationFromPose(pose);
+  if (!rotation) {
+    setText("cam-rot-yaw", "--");
+    setText("cam-rot-pitch", "--");
+    setText("cam-rot-roll", "--");
+    return;
+  }
+
+  setText("cam-rot-yaw", `${formatFixed(rotation.yaw, 1)}°`);
+  setText("cam-rot-pitch", `${formatFixed(rotation.pitch, 1)}°`);
+  setText("cam-rot-roll", `${formatFixed(rotation.roll, 1)}°`);
+}
+
+function updateCameraSpeedDisplays() {
+  const move = Number($("move-speed").value);
+  const rotate = Number($("rotate-speed").value);
+  setText("cam-move-display", Number.isFinite(move) ? move.toFixed(2) : "--");
+  setText("cam-rotate-display", Number.isFinite(rotate) ? String(Math.round(rotate)) : "--");
+  const moveSpeedValue = document.querySelector('.slider-row__value[data-for="move-speed"]');
+  if (moveSpeedValue) moveSpeedValue.textContent = Number.isFinite(move) ? move.toFixed(2) : "--";
+  const rotateSpeedValue = document.querySelector('.slider-row__value[data-for="rotate-speed"]');
+  if (rotateSpeedValue) rotateSpeedValue.textContent = Number.isFinite(rotate) ? String(Math.round(rotate)) : "--";
+}
+
+function updateCameraInfoPanel(renderer, renderFps = null) {
+  const pose = renderer && renderer.camera_pose_available && renderer.camera_pose
+    ? renderer.camera_pose
+    : null;
+  updateCameraInfoFromPose(pose);
+  updateCameraSpeedDisplays();
+  setText("cam-fps-display", Number.isFinite(renderFps) ? formatFixed(renderFps, 1) : "--");
+  const fps = document.querySelector(".viewer-fps");
+  if (fps) {
+    fps.textContent = Number.isFinite(renderFps) ? `${formatFixed(renderFps, 1)} fps` : "-- fps";
+  }
+}
+
 function syncPoseUi(pose) {
   copyPoseToInputs(pose);
   syncPayloadTextareaFromPose(pose);
+  updateCameraInfoFromPose(pose);
 }
 
 function updateManifestPanel(info) {
@@ -457,7 +600,6 @@ function updateManifestPanel(info) {
     select.value = "";
     custom.value = "";
     totalAssets.value = "--";
-    clearHealthPoll();
     updateStreamingStats(null);
     return;
   }
@@ -526,6 +668,7 @@ function updateLoadStatePanel(renderer) {
 
   $("load-state").value = state.rendererStatus.load_state;
   $("loaded-source-path").value = state.rendererStatus.loaded_source_path;
+  $("loaded-source-path").title = state.rendererStatus.loaded_source_path;
   $("last-load-error").value = state.rendererStatus.last_load_error;
 
   const sceneStateChip = $("scene-state-chip");
@@ -533,9 +676,131 @@ function updateLoadStatePanel(renderer) {
   const chipSuffix = loadState === "loaded" ? "loaded" : loadState === "loading" ? "loading" : loadState === "error" ? "error" : "idle";
   if (sceneStateChip) { sceneStateChip.textContent = loadState; sceneStateChip.className = `scene-card__chip-value scene-card__chip-value--${chipSuffix}`; }
   const sceneTypeChip = $("scene-type-chip"); if (sceneTypeChip) sceneTypeChip.textContent = state.rendererStatus.loaded_source_kind || "--";
-  const sceneLoadedName = $("scene-loaded-name"); if (sceneLoadedName) sceneLoadedName.textContent = basenameOf(state.rendererStatus.loaded_source_path);
+  const sceneLoadedName = $("scene-loaded-name"); if (sceneLoadedName) { sceneLoadedName.textContent = basenameOf(state.rendererStatus.loaded_source_path); sceneLoadedName.title = state.rendererStatus.loaded_source_path; }
   const loadedFileChip = $("loaded-file-chip"); if (loadedFileChip) loadedFileChip.hidden = !state.rendererStatus.content_loaded;
   const loadedFileChipText = $("loaded-file-chip-text"); if (loadedFileChipText) loadedFileChipText.textContent = basenameOf(state.rendererStatus.loaded_source_path);
+}
+
+function streamButtonOpen() {
+  const toggle = $("toggle-stream");
+  return Boolean(toggle && toggle.dataset.state === "open");
+}
+
+function updateConnectionPanel(payload = state.health.lastPayload) {
+  const origin = configuredHttpOrigin();
+  const wsUrl = $("ws-url").value.trim() || currentWsUrl();
+  setInputTitle("http-origin", origin);
+  setInputTitle("ws-url", wsUrl);
+
+  const healthOk = Boolean(payload && payload.ok && !state.health.error);
+  setText("connection-health-state", healthOk ? "OK" : (state.health.error ? "ERROR" : "--"), state.health.error || "");
+
+  const wsStatus = currentWsStatus();
+  const wsLabels = {
+    connected: "CONNECTED",
+    connecting: "CONNECTING",
+    disconnected: "DISCONNECTED",
+  };
+  setText("connection-ws-state", wsLabels[wsStatus] || "DISCONNECTED");
+
+  const stream = payload && payload.stream ? payload.stream : null;
+  const streamOpen = streamButtonOpen();
+  const activeStreamClients = stream ? Number(stream.active_clients) : 0;
+  setText("connection-stream-state", streamOpen ? "OPEN" : "CLOSED", `${formatInteger(activeStreamClients)} active stream client(s)`);
+
+  setText("connection-uptime", payload ? formatDuration(payload.uptime_sec) : "--");
+  setText("connection-stream-fps", stream && Number.isFinite(Number(stream.fps)) ? String(stream.fps) : "--");
+  const controlClients = payload && payload.control ? Number(payload.control.active_clients) : 0;
+  setText("connection-clients", payload ? `${formatInteger(activeStreamClients)} / ${formatInteger(controlClients)}` : "--", "stream / websocket");
+  if (stream) {
+    const width = Number(stream.width);
+    const height = Number(stream.height);
+    const spec = Number.isFinite(width) && Number.isFinite(height)
+      ? `${Math.round(width)} × ${Math.round(height)} @ ${formatInteger(stream.fps)} fps`
+      : "--";
+    setText("connection-stream-spec", spec);
+  } else {
+    setText("connection-stream-spec", "--");
+  }
+}
+
+function computeRenderFps(renderer) {
+  if (!renderer) return null;
+  const frameIndex = Number(renderer.frame_index);
+  const appTimeSec = Number(renderer.app_time_sec);
+  if (!Number.isFinite(frameIndex) || !Number.isFinite(appTimeSec)) {
+    return null;
+  }
+
+  const previous = state.health.lastRendererSample;
+  state.health.lastRendererSample = { frameIndex, appTimeSec };
+  if (!previous) {
+    return null;
+  }
+
+  const frameDelta = frameIndex - previous.frameIndex;
+  const timeDelta = appTimeSec - previous.appTimeSec;
+  if (frameDelta < 0 || timeDelta <= 0) {
+    return null;
+  }
+  return frameDelta / timeDelta;
+}
+
+function updateSceneInfoPanel(renderer) {
+  const scene = renderer && renderer.scene ? renderer.scene : null;
+  const path = scene && typeof scene.path === "string"
+    ? scene.path
+    : state.rendererStatus.loaded_source_path;
+  const sourceKind = scene && typeof scene.source_kind === "string"
+    ? scene.source_kind
+    : state.rendererStatus.loaded_source_kind;
+  const name = scene && typeof scene.name === "string" && scene.name
+    ? scene.name
+    : basenameOf(path);
+
+  setInputValue("scene-info-name", name || "--");
+  setInputValue("scene-info-path", path || "--");
+  setText("scene-info-type", sourceKind || "--");
+
+  const gaussianCount = scene ? Number(scene.gaussian_count) : NaN;
+  const renderableInstances = scene ? Number(scene.renderable_instance_count) : NaN;
+  const instanceCount = scene ? Number(scene.instance_count) : NaN;
+  const gaussianTitle = Number.isFinite(gaussianCount)
+    ? `${formatInteger(gaussianCount)} gaussians; ${formatInteger(renderableInstances)} / ${formatInteger(instanceCount)} renderable instances`
+    : "";
+  setText("scene-info-gaussians", Number.isFinite(gaussianCount) ? formatCompactCount(gaussianCount) : "--", gaussianTitle);
+
+  const vramBytes = scene ? Number(scene.vram_bytes) : NaN;
+  const vramTitle = scene
+    ? `GPU assets ${formatBytes(scene.gpu_asset_bytes)}, world ${formatBytes(scene.view_buffer_bytes)}, scratch ${formatBytes(scene.scratch_buffer_bytes)}, output ${formatBytes(scene.output_buffer_bytes)}`
+    : "";
+  setText("scene-info-vram", Number.isFinite(vramBytes) ? formatBytes(vramBytes) : "--", vramTitle);
+}
+
+function applyHealthPayload(payload) {
+  state.health.lastPayload = payload || null;
+  state.health.lastOkUnixMs = Date.now();
+  state.health.error = "";
+  state.statusError = false;
+
+  updateConnectionPanel(payload);
+  if (payload && payload.renderer) {
+    const renderFps = computeRenderFps(payload.renderer);
+    applyRendererState(payload.renderer);
+    updateCameraInfoPanel(payload.renderer, renderFps);
+    updateSceneInfoPanel(payload.renderer);
+  } else {
+    updateCameraInfoPanel(null, null);
+    updateSceneInfoPanel(null);
+  }
+  updateStatusChip();
+}
+
+function handleHealthPollError(error) {
+  state.health.error = error && error.message ? error.message : String(error || "Health poll failed.");
+  state.health.lastPayload = state.health.lastPayload || null;
+  updateConnectionPanel(state.health.lastPayload);
+  setStatus(`Health poll failed: ${state.health.error}`, true);
 }
 
 function syncRendererCameraPose(renderer, allowActiveController = false) {
@@ -572,12 +837,15 @@ function rendererStateFromReadyMessage(message) {
     current_phase: message.current_phase,
     available_phases: message.available_phases,
     total_assets: message.total_assets,
+    camera_pose_available: message.camera_pose_available,
+    camera_pose: message.camera_pose,
     content_loaded: message.content_loaded,
     loaded_source_kind: message.loaded_source_kind,
     loaded_source_path: message.loaded_source_path,
     load_state: message.load_state,
     last_load_error: message.last_load_error,
     last_load_sequence: message.last_load_sequence,
+    scene: message.scene,
   };
 }
 
@@ -592,7 +860,7 @@ async function pollHealthz() {
     throw new Error("Health response did not include renderer state.");
   }
 
-  applyRendererState(payload.renderer);
+  applyHealthPayload(payload);
   return payload.renderer;
 }
 
@@ -604,27 +872,28 @@ function clearHealthPoll() {
   setHealthPollButtonState(false);
 }
 
+function startHealthPoll(showStatus = false) {
+  clearHealthPoll();
+  const runPoll = () => {
+    pollHealthz().catch(handleHealthPollError);
+  };
+  runPoll();
+  state.healthPollTimer = window.setInterval(runPoll, HEALTH_POLL_INTERVAL_MS);
+  setHealthPollButtonState(true);
+  if (showStatus) {
+    setStatus("Health polling started.");
+  }
+}
+
 function toggleHealthPoll() {
   if (state.healthPollTimer !== null) {
     clearHealthPoll();
-    setStatus("Health polling stopped.");
+    setStatus("Health polling paused.");
+    updateConnectionPanel(state.health.lastPayload);
     return;
   }
 
-  pollHealthz()
-    .then(() => {
-      state.healthPollTimer = window.setInterval(() => {
-        pollHealthz().catch((error) => {
-          setStatus(error.message, true);
-          clearHealthPoll();
-        });
-      }, 1000);
-      setHealthPollButtonState(true);
-      setStatus("Health polling started.");
-    })
-    .catch((error) => {
-      setStatus(error.message, true);
-    });
+  startHealthPoll(true);
 }
 
 function clearLoadWatch() {
@@ -1085,10 +1354,12 @@ function buildPayloadObject() {
   return payloadObject;
 }
 
-function formatPayload() {
+function formatPayload(showStatus = true) {
   const payloadObject = buildPayloadObject();
   $("payload").value = JSON.stringify(payloadObject, null, 2);
-  setStatus("Payload formatted.");
+  if (showStatus) {
+    setStatus("Payload formatted.");
+  }
 }
 
 function openStream() {
@@ -1478,7 +1749,6 @@ function connectSocket() {
       state.cameraController.deactivate();
       setCameraControlButtonState(false);
     }
-    clearHealthPoll();
     clearLoadWatch();
     updateStatusChip();
     if (state.socket === socket) {
@@ -1578,9 +1848,14 @@ function applyDefaults() {
   $("rotate-speed").value = String(DEFAULT_ROTATE_SPEED);
   clearHealthPoll();
   clearLoadWatch();
+  state.health.lastPayload = null;
+  state.health.lastRendererSample = null;
+  state.health.lastOkUnixMs = 0;
+  state.health.error = "";
   updateManifestPanel(null);
   updateStreamingStats(null);
   updateLoadStatePanel(null);
+  updateSceneInfoPanel(null);
   setCameraControlButtonState(false);
   state.browse.currentPath = "";
   state.browse.parentPath = "";
@@ -1610,10 +1885,11 @@ function applyDefaults() {
   const sceneStateChip = $("scene-state-chip"); if (sceneStateChip) { sceneStateChip.textContent = "idle"; sceneStateChip.className = "scene-card__chip-value scene-card__chip-value--idle"; }
   $("loaded-file-chip").hidden = true;
   const toggleStream = $("toggle-stream"); if (toggleStream) { toggleStream.dataset.state = "closed"; toggleStream.textContent = "▶ Open Stream"; }
-  const moveSpeedValue = document.querySelector('.slider-row__value[data-for="move-speed"]'); if (moveSpeedValue) moveSpeedValue.textContent = Number($("move-speed").value).toFixed(2);
-  const rotateSpeedValue = document.querySelector('.slider-row__value[data-for="rotate-speed"]'); if (rotateSpeedValue) rotateSpeedValue.textContent = String(Math.round(Number($("rotate-speed").value)));
+  updateCameraSpeedDisplays();
   setStatus("disconnected"); updateStatusChip();
-  formatPayload();
+  updateConnectionPanel(null);
+  formatPayload(false);
+  startHealthPoll(false);
   browseInitialPath().catch((error) => setBrowseStatus(error.message, true));
 }
 
@@ -1712,11 +1988,11 @@ function bindActions() {
   });
   $("move-speed").addEventListener("input", (event) => {
     if (state.cameraController) state.cameraController.moveSpeed = Number(event.target.value);
-    const valueLabel = document.querySelector('.slider-row__value[data-for="move-speed"]'); if (valueLabel) valueLabel.textContent = Number(event.target.value).toFixed(2);
+    updateCameraSpeedDisplays();
   });
   $("rotate-speed").addEventListener("input", (event) => {
     if (state.cameraController) state.cameraController.rotateSpeed = Number(event.target.value);
-    const valueLabel = document.querySelector('.slider-row__value[data-for="rotate-speed"]'); if (valueLabel) valueLabel.textContent = String(Math.round(Number(event.target.value)));
+    updateCameraSpeedDisplays();
   });
   $("phase-select").addEventListener("change", (event) => {
     if (event.target.value) {

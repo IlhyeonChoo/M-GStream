@@ -87,6 +87,17 @@
         <div class="info-panel__pane is-active" data-pane="connection">
           <div class="info-panel__field"><span class="info-panel__field-label">HTTP Origin</span><input id="http-origin" class="field-input" type="text" value=""></div>
           <div class="info-panel__field"><span class="info-panel__field-label">WebSocket URL</span><input id="ws-url" class="field-input" type="text" value=""></div>
+          <div class="info-panel__stats">
+            <div class="info-panel__field"><span class="info-panel__field-label">Health</span><span class="info-panel__field-value" id="connection-health-state">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">WS</span><span class="info-panel__field-value" id="connection-ws-state">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">Stream</span><span class="info-panel__field-value" id="connection-stream-state">--</span></div>
+          </div>
+          <div class="info-panel__stats">
+            <div class="info-panel__field"><span class="info-panel__field-label">Uptime</span><span class="info-panel__field-value" id="connection-uptime">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">FPS</span><span class="info-panel__field-value" id="connection-stream-fps">--</span></div>
+            <div class="info-panel__field"><span class="info-panel__field-label">Clients</span><span class="info-panel__field-value" id="connection-clients">--</span></div>
+          </div>
+          <div class="info-panel__field"><span class="info-panel__field-label">Stream Size</span><span class="info-panel__field-value" id="connection-stream-spec">--</span></div>
           <div class="pose-buttons"><button id="apply-defaults" class="pose-buttons__primary" type="button">Use Current Origin</button><button id="disconnect-ws" class="pose-buttons__danger" type="button">Disconnect</button></div>
         </div>
         <div class="info-panel__pane" data-pane="camera">

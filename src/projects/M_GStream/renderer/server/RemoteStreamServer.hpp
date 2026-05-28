@@ -54,6 +54,17 @@ struct SIBR_MGSTREAM_SERVER_EXPORT RendererHealthSnapshot {
     size_t skipped_instances_last_frame = 0;
     size_t swap_hits = 0;
     size_t swap_misses = 0;
+    std::string scene_name;
+    std::string scene_path;
+    std::string scene_source_kind;
+    size_t scene_instance_count = 0;
+    size_t scene_renderable_instance_count = 0;
+    uint64_t scene_gaussian_count = 0;
+    size_t scene_gpu_asset_bytes = 0;
+    size_t scene_view_buffer_bytes = 0;
+    size_t scene_scratch_buffer_bytes = 0;
+    size_t scene_output_buffer_bytes = 0;
+    size_t scene_vram_bytes = 0;
 };
 
 struct SIBR_MGSTREAM_SERVER_EXPORT ServerStats {

@@ -888,6 +888,26 @@ std::string cameraPoseJson(const sibr::RemoteCameraPose& pose)
     return stream.str();
 }
 
+std::string sceneSummaryJson(const sibr::RendererHealthSnapshot& renderer)
+{
+    std::ostringstream stream;
+    stream
+        << "{"
+        << "\"name\":\"" << jsonEscape(renderer.scene_name) << "\","
+        << "\"path\":\"" << jsonEscape(renderer.scene_path) << "\","
+        << "\"source_kind\":\"" << jsonEscape(renderer.scene_source_kind) << "\","
+        << "\"instance_count\":" << renderer.scene_instance_count << ","
+        << "\"renderable_instance_count\":" << renderer.scene_renderable_instance_count << ","
+        << "\"gaussian_count\":" << renderer.scene_gaussian_count << ","
+        << "\"gpu_asset_bytes\":" << renderer.scene_gpu_asset_bytes << ","
+        << "\"view_buffer_bytes\":" << renderer.scene_view_buffer_bytes << ","
+        << "\"scratch_buffer_bytes\":" << renderer.scene_scratch_buffer_bytes << ","
+        << "\"output_buffer_bytes\":" << renderer.scene_output_buffer_bytes << ","
+        << "\"vram_bytes\":" << renderer.scene_vram_bytes
+        << "}";
+    return stream.str();
+}
+
 std::string healthJson(
     const sibr::ServerStats& stats,
     const sibr::RendererHealthSnapshot& renderer,
@@ -970,6 +990,7 @@ std::string healthJson(
     stream << ",\n    \"load_state\": \"" << jsonEscape(renderer.load_state) << "\"";
     stream << ",\n    \"last_load_error\": \"" << jsonEscape(renderer.last_load_error) << "\"";
     stream << ",\n    \"last_load_sequence\": " << renderer.last_load_sequence;
+    stream << ",\n    \"scene\": " << sceneSummaryJson(renderer);
     stream << ",\n    \"streaming\": {"
            << "\"required_gpu\":" << renderer.required_gpu_count
            << ",\"warm_cpu\":" << renderer.warm_cpu_count

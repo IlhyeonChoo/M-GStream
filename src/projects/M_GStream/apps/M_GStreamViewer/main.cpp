@@ -224,6 +224,10 @@ void pumpRemoteControl(RemoteStreamServer* server, MGStreamViewer& viewer, uint6
         }
         break;
     }
+    case ControlMessageType::UnloadContent: {
+        applied = viewer.unloadCurrentContent(apply_error, sequence);
+        break;
+    }
     }
 
     const auto apply_end = std::chrono::steady_clock::now();

@@ -58,6 +58,7 @@ namespace sibr {
 		bool loadModelDirectoryAsInstance(const std::string& modelPath);
 		bool replaceWithModelDirectory(const std::string& modelPath, std::string& error, uint64_t loadSequence = 0);
 		bool replaceWithManifestFile(const std::string& path, std::string& error, uint64_t loadSequence = 0);
+		bool unloadCurrentContent(std::string& error, uint64_t loadSequence = 0);
 		bool captureGaussianViewSnapshot(const std::string& snapshotPath);
 		bool tryGetGaussianViewCamera(sibr::InputCamera& camera, std::string& error) const;
 		bool applyGaussianViewCamera(const sibr::InputCamera& camera, std::string& error);

@@ -42,12 +42,12 @@ The current runtime accepts only text WebSocket messages on `/control`.
 The reference client assumes same-port, same-origin deployment and derives the default WebSocket URL from the current page origin.
 
 - On connect, the server sends a `ready` JSON message.
-- Valid `set_camera_pose` payloads return an `ack` JSON message.
+- Valid `set_camera_pose`, `set_phase`, `load_content`, and `unload_content` payloads return an `ack` JSON message.
 - Invalid payloads return an `error` JSON message.
 - Binary WebSocket messages are rejected.
 
-The current control queue policy is `latest_only`.
-At most one pending control message is kept between the server thread and the viewer main/update loop.
+The current control queue policy is camera latest-only plus management FIFO.
+At most one pending camera message is kept between the server thread and the viewer main/update loop; management messages such as load and unload are applied in order.
 
 ## Current Validation Rules
 
@@ -67,7 +67,7 @@ This directory does not yet provide:
 - reconnect/backoff policy
 - guarantees about the final browser UX
 - binary control payloads
-- richer control verbs beyond `set_camera_pose`
+- production-grade scene management beyond the current load/unload controls
 
 ## Change Guidance
 

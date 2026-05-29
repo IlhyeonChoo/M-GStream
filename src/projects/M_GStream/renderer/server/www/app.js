@@ -17,6 +17,7 @@ const state = {
     entries: [],
     selectedEntry: null,
     pendingLoadSequence: 0,
+    pendingContentAction: "",
   },
   search: {
     active: false,
@@ -277,6 +278,13 @@ function setHealthPollButtonState(active) {
 
 function setLoadButtonState(disabled, label = "Load Selected") {
   const button = $("load-selected");
+  button.disabled = disabled;
+  button.textContent = label;
+}
+
+function setUnloadButtonState(disabled, label = "Unload Current") {
+  const button = $("unload-current");
+  if (!button) return;
   button.disabled = disabled;
   button.textContent = label;
 }
@@ -679,6 +687,7 @@ function updateLoadStatePanel(renderer) {
   const sceneLoadedName = $("scene-loaded-name"); if (sceneLoadedName) { sceneLoadedName.textContent = basenameOf(state.rendererStatus.loaded_source_path); sceneLoadedName.title = state.rendererStatus.loaded_source_path; }
   const loadedFileChip = $("loaded-file-chip"); if (loadedFileChip) loadedFileChip.hidden = !state.rendererStatus.content_loaded;
   const loadedFileChipText = $("loaded-file-chip-text"); if (loadedFileChipText) loadedFileChipText.textContent = basenameOf(state.rendererStatus.loaded_source_path);
+  updateUnloadButtonAvailability();
 }
 
 function streamButtonOpen() {
@@ -902,13 +911,17 @@ function clearLoadWatch() {
     state.loadWatchTimer = null;
   }
   state.browse.pendingLoadSequence = 0;
+  state.browse.pendingContentAction = "";
   updateLoadButtonAvailability();
 }
 
-function startLoadWatch(sequence) {
+function startLoadWatch(sequence, expectedFinalState = "loaded", actionName = "load") {
   clearLoadWatch();
   state.browse.pendingLoadSequence = sequence;
-  setLoadButtonState(true, `Loading (seq=${sequence})`);
+  state.browse.pendingContentAction = actionName;
+  const activeLabel = actionName === "unload" ? "Unloading" : "Loading";
+  setLoadButtonState(true, `${activeLabel} (seq=${sequence})`);
+  updateUnloadButtonAvailability();
   state.loadWatchTimer = window.setInterval(async () => {
     try {
       const renderer = await pollHealthz();
@@ -917,11 +930,16 @@ function startLoadWatch(sequence) {
         return;
       }
       clearLoadWatch();
-      if (renderer.load_state === "loaded") {
-        syncRendererCameraPose(renderer, true);
-        setStatus(`Content loaded (seq=${sequence}).`);
+      if (renderer.load_state === expectedFinalState) {
+        if (actionName === "load") {
+          syncRendererCameraPose(renderer, true);
+          setStatus(`Content loaded (seq=${sequence}).`);
+        } else {
+          setStatus(`Content unloaded (seq=${sequence}).`);
+        }
       } else {
-        setStatus(`Load failed (seq=${sequence}): ${renderer.last_load_error || "unknown error"}`, true);
+        const actionLabel = actionName === "unload" ? "Unload" : "Load";
+        setStatus(`${actionLabel} failed (seq=${sequence}): ${renderer.last_load_error || "unknown error"}`, true);
       }
     } catch (error) {
       clearLoadWatch();
@@ -930,15 +948,28 @@ function startLoadWatch(sequence) {
   }, 500);
 }
 
+function updateUnloadButtonAvailability() {
+  const hasPendingRequest = state.browse.pendingLoadSequence !== 0;
+  if (hasPendingRequest) {
+    const label = state.browse.pendingContentAction === "unload" ? "Unloading..." : "Load Pending";
+    setUnloadButtonState(true, label);
+    return;
+  }
+  setUnloadButtonState(!state.rendererStatus.content_loaded, "Unload Current");
+}
+
 function updateLoadButtonAvailability() {
   const selected = state.browse.selectedEntry;
   const hasPendingLoad = state.browse.pendingLoadSequence !== 0;
   const canLoad = isBrowseEntryLoadable(selected);
   if (hasPendingLoad) {
-    setLoadButtonState(true, `Loading (seq=${state.browse.pendingLoadSequence})`);
+    const activeLabel = state.browse.pendingContentAction === "unload" ? "Unloading" : "Loading";
+    setLoadButtonState(true, `${activeLabel} (seq=${state.browse.pendingLoadSequence})`);
+    updateUnloadButtonAvailability();
     return;
   }
   setLoadButtonState(!canLoad, "Load Selected");
+  updateUnloadButtonAvailability();
 }
 
 function setSelectedBrowseEntry(entry) {
@@ -1324,6 +1355,20 @@ async function loadSelectedContent() {
     path: entry.path,
   }));
   setStatus(`Load request sent: ${entry.path}`);
+}
+
+function unloadCurrentContent() {
+  ensureSocketConnected();
+  if (state.browse.pendingLoadSequence !== 0) {
+    throw new Error("A content request is already pending.");
+  }
+  if (!state.rendererStatus.content_loaded) {
+    throw new Error("No content is currently loaded.");
+  }
+
+  state.socket.send(JSON.stringify({ type: "unload_content" }));
+  setUnloadButtonState(true, "Unload Sent");
+  setStatus("Unload request sent.");
 }
 
 function applyPhase() {
@@ -1786,8 +1831,11 @@ function connectSocket() {
         if (message.request_type === "set_phase") {
           setStatus(`Phase request queued (seq=${message.sequence}).`);
         } else if (message.request_type === "load_content") {
-          startLoadWatch(Number(message.sequence));
+          startLoadWatch(Number(message.sequence), "loaded", "load");
           setStatus(`Load request queued (seq=${message.sequence}).`);
+        } else if (message.request_type === "unload_content") {
+          startLoadWatch(Number(message.sequence), "idle", "unload");
+          setStatus(`Unload request queued (seq=${message.sequence}).`);
         }
         return;
       }
@@ -1949,6 +1997,13 @@ function bindActions() {
   $("load-selected").addEventListener("click", async () => {
     try {
       await loadSelectedContent();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+  $("unload-current").addEventListener("click", () => {
+    try {
+      unloadCurrentContent();
     } catch (error) {
       setStatus(error.message, true);
     }

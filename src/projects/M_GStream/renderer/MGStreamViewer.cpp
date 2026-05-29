@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <initializer_list>
+#include <imgui_internal.h>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -955,6 +956,26 @@ namespace sibr {
 		return true;
 	}
 
+	bool MGStreamViewer::unloadCurrentContent(std::string& error, uint64_t loadSequence)
+	{
+		if (!resetCurrentContent(error)) {
+			_loadedContentKind.clear();
+			_loadedContentPath.clear();
+			_loadState = contentLoadStateLabel(ContentLoadState::Error);
+			_lastLoadError = error;
+			_lastLoadSequence = loadSequence;
+			return false;
+		}
+
+		_loadedContentKind.clear();
+		_loadedContentPath.clear();
+		_loadState = contentLoadStateLabel(ContentLoadState::Idle);
+		_lastLoadError.clear();
+		_lastLoadSequence = loadSequence;
+		error.clear();
+		return true;
+	}
+
 	bool MGStreamViewer::captureGaussianViewSnapshot(const std::string& snapshotPath)
 	{
 		if (snapshotPath.empty()) {
@@ -1650,6 +1671,22 @@ namespace sibr {
 						_resourceManager->addField(std::move(field));
 					}
 				}
+			}
+			ImGui::SameLine();
+			const bool canUnloadCurrent = hasLoadedContent();
+			if (!canUnloadCurrent) {
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+			}
+			if (ImGui::Button("Unload Current", ImVec2(130, 30)) && canUnloadCurrent) {
+				std::string unloadError;
+				if (!unloadCurrentContent(unloadError)) {
+					SIBR_WRG << "Failed to unload current content: " << unloadError << std::endl;
+				}
+			}
+			if (!canUnloadCurrent) {
+				ImGui::PopStyleVar();
+				ImGui::PopItemFlag();
 			}
 			ImGui::Separator();
 

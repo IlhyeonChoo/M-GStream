@@ -469,6 +469,30 @@ select:focus-visible, summary:focus-visible {
 .scene-card__chip-value--error   { color: var(--danger); }
 .scene-card__chip-value--idle    { color: var(--text-dim); }
 
+.scene-card__unload-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--btn-border);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.scene-card__unload-btn:enabled:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.scene-card__unload-btn:disabled {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+  color: var(--text-ghost);
+  cursor: not-allowed;
+}
+
 .scene-card__error-wrap { margin-top: 8px; }
 .scene-card__error-wrap summary {
   color: var(--text-faint);

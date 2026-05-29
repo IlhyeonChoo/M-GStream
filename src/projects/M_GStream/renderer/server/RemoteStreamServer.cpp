@@ -2181,6 +2181,8 @@ void RemoteStreamServer::serverThreadMain()
                                 request_type = "set_phase";
                             } else if (parsed.message.type == ControlMessageType::LoadContent) {
                                 request_type = "load_content";
+                            } else if (parsed.message.type == ControlMessageType::UnloadContent) {
+                                request_type = "unload_content";
                             }
                             response_payload = controlAckJson(sequence, superseded_previous, request_type);
                             if (!writeWebSocketText(ws, response_payload, ws_error)) {

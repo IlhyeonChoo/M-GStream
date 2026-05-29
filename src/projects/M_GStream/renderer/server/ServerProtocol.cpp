@@ -241,6 +241,8 @@ namespace sibr {
 				result.error = "Field 'path' must not be empty.";
 				return result;
 			}
+		} else if (type == "unload_content") {
+			message.type = ControlMessageType::UnloadContent;
 		} else {
 			result.error = "Unsupported control message type '" + type + "'.";
 			return result;

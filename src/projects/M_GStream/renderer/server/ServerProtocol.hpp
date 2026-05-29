@@ -29,7 +29,8 @@ namespace sibr {
 	enum class ControlMessageType {
 		SetCameraPose,
 		SetPhase,
-		LoadContent
+		LoadContent,
+		UnloadContent
 	};
 
 	enum class LoadContentSourceKind {

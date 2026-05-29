@@ -4,13 +4,535 @@
 #include <projects/M_GStream/renderer/subsystem/rendering_system/RenderingSystem.hpp>
 
 #include <core/system/CommandLineArgs.hpp>
+#include "picojson/picojson.hpp"
 
 #include <algorithm>
 #include <boost/filesystem.hpp>
+#include <cmath>
 #include <cstdio>
 #include <cuda_runtime.h>
+#include <fstream>
 #include <iomanip>
+#include <initializer_list>
+#include <optional>
 #include <sstream>
+#include <vector>
+
+namespace {
+	constexpr float kPi = 3.14159265358979323846f;
+	constexpr float kMinFocusVectorNorm = 1e-5f;
+
+	struct ParsedCameraPose {
+		sibr::Vector3f position = sibr::Vector3f::Zero();
+		sibr::Vector3f forward = sibr::Vector3f(0.0f, 0.0f, -1.0f);
+		sibr::Vector3f up = sibr::Vector3f(0.0f, 1.0f, 0.0f);
+		bool has_orientation = false;
+		bool has_fovy = false;
+		float fovy = 0.0f;
+	};
+
+	struct CameraFocusPose {
+		sibr::Vector3f eye = sibr::Vector3f::Zero();
+		sibr::Vector3f target = sibr::Vector3f(0.0f, 0.0f, -1.0f);
+		sibr::Vector3f up = sibr::Vector3f(0.0f, 1.0f, 0.0f);
+		bool has_fovy = false;
+		float fovy = 0.0f;
+	};
+
+	bool isFiniteFloat(float value)
+	{
+		return std::isfinite(value) != 0;
+	}
+
+	bool isFiniteVector(const sibr::Vector3f& value)
+	{
+		return isFiniteFloat(value.x()) && isFiniteFloat(value.y()) && isFiniteFloat(value.z());
+	}
+
+	bool isValidDirection(const sibr::Vector3f& value)
+	{
+		return isFiniteVector(value) && value.norm() > kMinFocusVectorNorm;
+	}
+
+	std::optional<sibr::Vector3f> normalizedVector(const sibr::Vector3f& value)
+	{
+		if (!isValidDirection(value)) {
+			return std::nullopt;
+		}
+		return value.normalized();
+	}
+
+	std::optional<float> parseJsonFloat(const picojson::value& value)
+	{
+		if (!value.is<double>()) {
+			return std::nullopt;
+		}
+
+		const float parsed = static_cast<float>(value.get<double>());
+		if (!isFiniteFloat(parsed)) {
+			return std::nullopt;
+		}
+		return parsed;
+	}
+
+	std::optional<float> parseJsonFloatField(const picojson::object& object, const char* key)
+	{
+		const auto it = object.find(key);
+		if (it == object.end()) {
+			return std::nullopt;
+		}
+		return parseJsonFloat(it->second);
+	}
+
+	std::optional<sibr::Vector3f> parseJsonVector3(const picojson::value& value)
+	{
+		if (!value.is<picojson::array>()) {
+			return std::nullopt;
+		}
+
+		const auto& values = value.get<picojson::array>();
+		if (values.size() != 3) {
+			return std::nullopt;
+		}
+
+		const auto x = parseJsonFloat(values[0]);
+		const auto y = parseJsonFloat(values[1]);
+		const auto z = parseJsonFloat(values[2]);
+		if (!x || !y || !z) {
+			return std::nullopt;
+		}
+
+		const sibr::Vector3f parsed(*x, *y, *z);
+		if (!isFiniteVector(parsed)) {
+			return std::nullopt;
+		}
+		return parsed;
+	}
+
+	std::optional<sibr::Vector3f> parseJsonVector3Field(
+		const picojson::object& object,
+		std::initializer_list<const char*> keys)
+	{
+		for (const char* key : keys) {
+			const auto it = object.find(key);
+			if (it == object.end()) {
+				continue;
+			}
+
+			const auto parsed = parseJsonVector3(it->second);
+			if (parsed) {
+				return parsed;
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::optional<sibr::Matrix3f> parseJsonMatrix3(const picojson::value& value)
+	{
+		if (!value.is<picojson::array>()) {
+			return std::nullopt;
+		}
+
+		const auto& rows = value.get<picojson::array>();
+		sibr::Matrix3f matrix;
+		if (rows.size() == 3 && rows[0].is<picojson::array>()) {
+			for (size_t row = 0; row < 3; ++row) {
+				if (!rows[row].is<picojson::array>()) {
+					return std::nullopt;
+				}
+				const auto& values = rows[row].get<picojson::array>();
+				if (values.size() != 3) {
+					return std::nullopt;
+				}
+				for (size_t col = 0; col < 3; ++col) {
+					const auto parsed = parseJsonFloat(values[col]);
+					if (!parsed) {
+						return std::nullopt;
+					}
+					matrix(static_cast<int>(row), static_cast<int>(col)) = *parsed;
+				}
+			}
+			return matrix;
+		}
+
+		if (rows.size() == 9) {
+			for (size_t index = 0; index < rows.size(); ++index) {
+				const auto parsed = parseJsonFloat(rows[index]);
+				if (!parsed) {
+					return std::nullopt;
+				}
+				matrix(static_cast<int>(index / 3), static_cast<int>(index % 3)) = *parsed;
+			}
+			return matrix;
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<sibr::Matrix4f> parseJsonMatrix4(const picojson::value& value)
+	{
+		if (!value.is<picojson::array>()) {
+			return std::nullopt;
+		}
+
+		const auto& rows = value.get<picojson::array>();
+		sibr::Matrix4f matrix;
+		if (rows.size() == 4 && rows[0].is<picojson::array>()) {
+			for (size_t row = 0; row < 4; ++row) {
+				if (!rows[row].is<picojson::array>()) {
+					return std::nullopt;
+				}
+				const auto& values = rows[row].get<picojson::array>();
+				if (values.size() != 4) {
+					return std::nullopt;
+				}
+				for (size_t col = 0; col < 4; ++col) {
+					const auto parsed = parseJsonFloat(values[col]);
+					if (!parsed) {
+						return std::nullopt;
+					}
+					matrix(static_cast<int>(row), static_cast<int>(col)) = *parsed;
+				}
+			}
+			return matrix;
+		}
+
+		if (rows.size() == 16) {
+			for (size_t index = 0; index < rows.size(); ++index) {
+				const auto parsed = parseJsonFloat(rows[index]);
+				if (!parsed) {
+					return std::nullopt;
+				}
+				matrix(static_cast<int>(index / 4), static_cast<int>(index % 4)) = *parsed;
+			}
+			return matrix;
+		}
+
+		return std::nullopt;
+	}
+
+	std::optional<sibr::Matrix3f> parseJsonMatrix3Field(
+		const picojson::object& object,
+		std::initializer_list<const char*> keys)
+	{
+		for (const char* key : keys) {
+			const auto it = object.find(key);
+			if (it == object.end()) {
+				continue;
+			}
+
+			const auto parsed = parseJsonMatrix3(it->second);
+			if (parsed) {
+				return parsed;
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::optional<sibr::Matrix4f> parseJsonMatrix4Field(
+		const picojson::object& object,
+		std::initializer_list<const char*> keys)
+	{
+		for (const char* key : keys) {
+			const auto it = object.find(key);
+			if (it == object.end()) {
+				continue;
+			}
+
+			const auto parsed = parseJsonMatrix4(it->second);
+			if (parsed) {
+				return parsed;
+			}
+		}
+		return std::nullopt;
+	}
+
+	void applyCameraToWorldOrientation(const sibr::Matrix3f& rotation, ParsedCameraPose& pose)
+	{
+		// SIBR cameras look along local -Z. Graphdeco-style camera matrices are treated as camera-to-world.
+		const sibr::Vector3f forward(-rotation(0, 2), -rotation(1, 2), -rotation(2, 2));
+		const sibr::Vector3f up(rotation(0, 1), rotation(1, 1), rotation(2, 1));
+		const auto normalizedForward = normalizedVector(forward);
+		const auto normalizedUp = normalizedVector(up);
+		if (!normalizedForward || !normalizedUp) {
+			return;
+		}
+
+		pose.forward = *normalizedForward;
+		pose.up = *normalizedUp;
+		pose.has_orientation = true;
+	}
+
+	std::optional<float> parseFovy(const picojson::object& object)
+	{
+		for (const char* key : { "fovy", "fov_y", "camera_angle_y", "FoVy" }) {
+			const auto value = parseJsonFloatField(object, key);
+			if (!value) {
+				continue;
+			}
+
+			if (*value > 0.0f && *value < kPi) {
+				return *value;
+			}
+			if (*value > 0.0f && *value < 180.0f) {
+				return *value * kPi / 180.0f;
+			}
+		}
+
+		const auto fy = parseJsonFloatField(object, "fy");
+		const auto height = parseJsonFloatField(object, "height");
+		if (fy && height && *fy > 0.0f && *height > 0.0f) {
+			return 2.0f * std::atan(0.5f * *height / *fy);
+		}
+
+		return std::nullopt;
+	}
+
+	bool parseCameraPoseObject(const picojson::object& object, ParsedCameraPose& pose)
+	{
+		bool hasPosition = false;
+
+		if (const auto transform = parseJsonMatrix4Field(object, { "transform_matrix", "camera_to_world", "c2w" })) {
+			pose.position = sibr::Vector3f((*transform)(0, 3), (*transform)(1, 3), (*transform)(2, 3));
+			hasPosition = isFiniteVector(pose.position);
+			const sibr::Matrix3f rotation = transform->block<3, 3>(0, 0);
+			applyCameraToWorldOrientation(rotation, pose);
+		}
+
+		if (const auto position = parseJsonVector3Field(object, { "position", "camera_position", "camera_center", "eye" })) {
+			pose.position = *position;
+			hasPosition = true;
+		}
+
+		if (const auto rotation = parseJsonMatrix3Field(object, { "rotation", "orientation" })) {
+			applyCameraToWorldOrientation(*rotation, pose);
+		}
+
+		const auto forward = parseJsonVector3Field(object, { "forward", "direction", "view_direction" });
+		const auto up = parseJsonVector3Field(object, { "up" });
+		if (forward && up) {
+			const auto normalizedForward = normalizedVector(*forward);
+			const auto normalizedUp = normalizedVector(*up);
+			if (normalizedForward && normalizedUp) {
+				pose.forward = *normalizedForward;
+				pose.up = *normalizedUp;
+				pose.has_orientation = true;
+			}
+		}
+
+		if (hasPosition) {
+			const auto target = parseJsonVector3Field(object, { "target", "look_at", "lookat" });
+			if (target) {
+				const auto targetForward = normalizedVector(*target - pose.position);
+				if (targetForward) {
+					pose.forward = *targetForward;
+					pose.has_orientation = true;
+				}
+			}
+		}
+
+		if (const auto fovy = parseFovy(object)) {
+			pose.has_fovy = true;
+			pose.fovy = *fovy;
+		}
+
+		return hasPosition && isFiniteVector(pose.position);
+	}
+
+	void collectCameraPoseSamples(const picojson::array& cameras, std::vector<ParsedCameraPose>& samples)
+	{
+		for (const auto& cameraValue : cameras) {
+			if (!cameraValue.is<picojson::object>()) {
+				continue;
+			}
+
+			ParsedCameraPose sample;
+			if (parseCameraPoseObject(cameraValue.get<picojson::object>(), sample)) {
+				samples.emplace_back(sample);
+			}
+		}
+	}
+
+	bool loadCameraPoseSamples(const boost::filesystem::path& modelDir, std::vector<ParsedCameraPose>& samples)
+	{
+		const boost::filesystem::path camerasPath = modelDir / "cameras.json";
+		if (!boost::filesystem::exists(camerasPath) || !boost::filesystem::is_regular_file(camerasPath)) {
+			return false;
+		}
+
+		std::ifstream camerasFile(camerasPath.string());
+		if (!camerasFile.good()) {
+			SIBR_WRG << "Unable to open cameras.json at " << camerasPath.string() << std::endl;
+			return false;
+		}
+
+		picojson::value rootValue;
+		const std::string parseError = picojson::parse(rootValue, camerasFile);
+		if (!parseError.empty()) {
+			SIBR_WRG << "Invalid cameras.json at " << camerasPath.string() << ": " << parseError << std::endl;
+			return false;
+		}
+
+		if (rootValue.is<picojson::array>()) {
+			collectCameraPoseSamples(rootValue.get<picojson::array>(), samples);
+		} else if (rootValue.is<picojson::object>()) {
+			const auto& root = rootValue.get<picojson::object>();
+			bool parsedArray = false;
+			for (const char* key : { "cameras", "frames" }) {
+				const auto it = root.find(key);
+				if (it != root.end() && it->second.is<picojson::array>()) {
+					collectCameraPoseSamples(it->second.get<picojson::array>(), samples);
+					parsedArray = true;
+				}
+			}
+
+			if (!parsedArray) {
+				ParsedCameraPose sample;
+				if (parseCameraPoseObject(root, sample)) {
+					samples.emplace_back(sample);
+				}
+			}
+		}
+
+		if (samples.empty()) {
+			SIBR_WRG << "cameras.json did not contain valid camera poses at " << camerasPath.string() << std::endl;
+			return false;
+		}
+		return true;
+	}
+
+	float medianValue(std::vector<float> values)
+	{
+		if (values.empty()) {
+			return 0.0f;
+		}
+
+		std::sort(values.begin(), values.end());
+		const size_t mid = values.size() / 2;
+		if ((values.size() % 2) != 0) {
+			return values[mid];
+		}
+		return 0.5f * (values[mid - 1] + values[mid]);
+	}
+
+	sibr::Vector3f medianVector(const std::vector<sibr::Vector3f>& values)
+	{
+		std::vector<float> xs;
+		std::vector<float> ys;
+		std::vector<float> zs;
+		xs.reserve(values.size());
+		ys.reserve(values.size());
+		zs.reserve(values.size());
+		for (const auto& value : values) {
+			xs.emplace_back(value.x());
+			ys.emplace_back(value.y());
+			zs.emplace_back(value.z());
+		}
+
+		return sibr::Vector3f(medianValue(xs), medianValue(ys), medianValue(zs));
+	}
+
+	std::optional<sibr::Vector3f> computeGaussianPositionCenter(const sibr::GaussianField& field)
+	{
+		double x = 0.0;
+		double y = 0.0;
+		double z = 0.0;
+		size_t count = 0;
+		for (const auto& position : field.pos) {
+			if (!isFiniteVector(position)) {
+				continue;
+			}
+			x += static_cast<double>(position.x());
+			y += static_cast<double>(position.y());
+			z += static_cast<double>(position.z());
+			++count;
+		}
+
+		if (count == 0) {
+			return std::nullopt;
+		}
+
+		return sibr::Vector3f(
+			static_cast<float>(x / static_cast<double>(count)),
+			static_cast<float>(y / static_cast<double>(count)),
+			static_cast<float>(z / static_cast<double>(count)));
+	}
+
+	sibr::Vector3f boundsCenter(const sibr::Vector3f& minBounds, const sibr::Vector3f& maxBounds)
+	{
+		return 0.5f * (minBounds + maxBounds);
+	}
+
+	bool buildCamerasJsonFocusPose(const sibr::GaussianField& field, CameraFocusPose& focusPose)
+	{
+		std::vector<ParsedCameraPose> samples;
+		if (!loadCameraPoseSamples(boost::filesystem::path(field.path), samples)) {
+			return false;
+		}
+
+		std::vector<sibr::Vector3f> positions;
+		std::vector<float> fovys;
+		positions.reserve(samples.size());
+		for (const auto& sample : samples) {
+			positions.emplace_back(sample.position);
+			if (sample.has_fovy && sample.fovy > 0.0f && sample.fovy < kPi) {
+				fovys.emplace_back(sample.fovy);
+			}
+		}
+
+		focusPose.eye = medianVector(positions);
+
+		const sibr::Vector3f fallbackTarget = computeGaussianPositionCenter(field).value_or(boundsCenter(field.min_edges, field.max_edges));
+		const sibr::Vector3f fallbackForward = normalizedVector(fallbackTarget - focusPose.eye)
+			.value_or(sibr::Vector3f(0.0f, 0.0f, -1.0f));
+
+		sibr::Vector3f forwardSum = sibr::Vector3f::Zero();
+		sibr::Vector3f upSum = sibr::Vector3f::Zero();
+		size_t orientationCount = 0;
+		for (const auto& sample : samples) {
+			if (!sample.has_orientation) {
+				continue;
+			}
+
+			auto forward = sample.forward;
+			auto up = sample.up;
+			if (!isValidDirection(forward) || !isValidDirection(up)) {
+				continue;
+			}
+
+			forward.normalize();
+			up.normalize();
+			if (forward.dot(fallbackForward) < 0.0f) {
+				forward = -forward;
+			}
+			if (up.dot(sibr::Vector3f(0.0f, 1.0f, 0.0f)) < 0.0f) {
+				up = -up;
+			}
+
+			forwardSum += forward;
+			upSum += up;
+			++orientationCount;
+		}
+
+		sibr::Vector3f forward = fallbackForward;
+		sibr::Vector3f up(0.0f, 1.0f, 0.0f);
+		if (orientationCount > 0 && isValidDirection(forwardSum)) {
+			forward = forwardSum.normalized();
+		}
+		if (orientationCount > 0 && isValidDirection(upSum) && std::fabs(upSum.normalized().dot(forward)) < 0.98f) {
+			up = upSum.normalized();
+		}
+
+		focusPose.target = focusPose.eye + forward;
+		focusPose.up = up;
+		if (!fovys.empty()) {
+			focusPose.has_fovy = true;
+			focusPose.fovy = medianValue(fovys);
+		}
+
+		return true;
+	}
+} // namespace
 
 namespace sibr {
 	MGStreamViewer::MGStreamViewer(Window& window, bool resize)
@@ -337,6 +859,7 @@ namespace sibr {
 		Vector3f minBounds = field->min_edges;
 		Vector3f maxBounds = field->max_edges;
 		const bool addedField = _resourceManager->addField(std::move(field));
+		GaussianField::Ptr focusField;
 		if (!addedField) {
 			const auto existingField = _resourceManager->getCpuFieldShared(assetId);
 			if (!existingField) {
@@ -346,6 +869,9 @@ namespace sibr {
 			}
 			minBounds = existingField->min_edges;
 			maxBounds = existingField->max_edges;
+			focusField = existingField;
+		} else {
+			focusField = _resourceManager->getCpuFieldShared(assetId);
 		}
 
 		for (const auto& instancePair : _scene->getInstances()) {
@@ -356,7 +882,11 @@ namespace sibr {
 				_loadedContentPath = resolvedPath;
 				_loadState = contentLoadStateLabel(ContentLoadState::Loaded);
 				_lastLoadError.clear();
-				focusCameraOnBounds(minBounds, maxBounds);
+				if (focusField) {
+					focusCameraOnModel(*focusField);
+				} else {
+					focusCameraOnBounds(minBounds, maxBounds);
+				}
 				return true;
 			}
 		}
@@ -384,7 +914,11 @@ namespace sibr {
 		_loadedContentPath = resolvedPath;
 		_loadState = contentLoadStateLabel(ContentLoadState::Loaded);
 		_lastLoadError.clear();
-		focusCameraOnBounds(minBounds, maxBounds);
+		if (focusField) {
+			focusCameraOnModel(*focusField);
+		} else {
+			focusCameraOnBounds(minBounds, maxBounds);
+		}
 		return true;
 	}
 
@@ -754,18 +1288,62 @@ namespace sibr {
 		focusCameraOnBounds(minBounds, maxBounds);
 	}
 
+	void MGStreamViewer::focusCameraOnModel(const GaussianField& field)
+	{
+		CameraFocusPose camerasJsonPose;
+		if (buildCamerasJsonFocusPose(field, camerasJsonPose)) {
+			applyFocusCameraPose(
+				camerasJsonPose.eye,
+				camerasJsonPose.target,
+				camerasJsonPose.up,
+				field.min_edges,
+				field.max_edges,
+				camerasJsonPose.has_fovy,
+				camerasJsonPose.fovy);
+			return;
+		}
+
+		if (const auto gaussianCenter = computeGaussianPositionCenter(field)) {
+			focusCameraOnPoint(*gaussianCenter, field.min_edges, field.max_edges);
+			return;
+		}
+
+		focusCameraOnBounds(field.min_edges, field.max_edges);
+	}
+
+	void MGStreamViewer::focusCameraOnPoint(const Vector3f& focusPoint, const Vector3f& minBounds, const Vector3f& maxBounds)
+	{
+		if (!isFiniteVector(focusPoint)) {
+			return;
+		}
+
+		const Vector3f diagonal = maxBounds - minBounds;
+		const float maxExtent = std::max(1.0f, std::max(std::fabs(diagonal.x()), std::max(std::fabs(diagonal.y()), std::fabs(diagonal.z()))));
+		const float zMargin = std::max(0.1f, 0.05f * std::fabs(diagonal.z()));
+		const float preferredZOffset = std::max(1.0f, 0.25f * maxExtent);
+		Vector3f eye = focusPoint;
+		eye.z() = focusPoint.z() + preferredZOffset;
+
+		if (isFiniteVector(minBounds) && isFiniteVector(maxBounds) && diagonal.z() > 2.0f * zMargin) {
+			const float minZ = minBounds.z() + zMargin;
+			const float maxZ = maxBounds.z() - zMargin;
+			eye.z() = std::min(maxZ, std::max(minZ, eye.z()));
+		}
+
+		// Keep the camera inside the manifest AABB so camera_bounds rules immediately activate.
+		const float xyInset = std::max(0.01f, 0.02f * maxExtent);
+		if (isFiniteVector(minBounds) && isFiniteVector(maxBounds) && diagonal.x() > 2.0f * xyInset) {
+			eye.x() = std::min(maxBounds.x() - xyInset, std::max(minBounds.x() + xyInset, eye.x()));
+		}
+		if (isFiniteVector(minBounds) && isFiniteVector(maxBounds) && diagonal.y() > 2.0f * xyInset) {
+			eye.y() = std::min(maxBounds.y() - xyInset, std::max(minBounds.y() + xyInset, eye.y()));
+		}
+
+		applyFocusCameraPose(eye, focusPoint, Vector3f(0.0f, 1.0f, 0.0f), minBounds, maxBounds);
+	}
+
 	void MGStreamViewer::focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds)
 	{
-		const auto viewIt = _ibrSubViews.find("Gaussian View");
-		if (viewIt == _ibrSubViews.end()) {
-			return;
-		}
-
-		auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler);
-		if (!handler) {
-			return;
-		}
-
 		const Vector3f center = 0.5f * (minBounds + maxBounds);
 		const Vector3f diagonal = maxBounds - minBounds;
 		const float maxExtent = std::max(1.0f, std::max(diagonal.x(), std::max(diagonal.y(), diagonal.z())));
@@ -780,10 +1358,52 @@ namespace sibr {
 		eye.x() = std::min(maxBounds.x() - xyInset, std::max(minBounds.x() + xyInset, eye.x()));
 		eye.y() = std::min(maxBounds.y() - xyInset, std::max(minBounds.y() + xyInset, eye.y()));
 
+		applyFocusCameraPose(eye, center, Vector3f(0.0f, 1.0f, 0.0f), minBounds, maxBounds);
+	}
+
+	void MGStreamViewer::applyFocusCameraPose(
+		const Vector3f& eye,
+		const Vector3f& target,
+		const Vector3f& up,
+		const Vector3f& minBounds,
+		const Vector3f& maxBounds,
+		bool hasFovy,
+		float fovy)
+	{
+		const auto viewIt = _ibrSubViews.find("Gaussian View");
+		if (viewIt == _ibrSubViews.end()) {
+			return;
+		}
+
+		auto handler = std::dynamic_pointer_cast<InteractiveCameraHandler>(viewIt->second.handler);
+		if (!handler) {
+			return;
+		}
+
+		const auto forward = normalizedVector(target - eye);
+		if (!forward) {
+			return;
+		}
+
+		Vector3f cameraUp = up;
+		if (!isValidDirection(cameraUp) || std::fabs(cameraUp.normalized().dot(*forward)) > 0.98f) {
+			cameraUp = std::fabs(forward->dot(Vector3f(0.0f, 1.0f, 0.0f))) < 0.98f
+				? Vector3f(0.0f, 1.0f, 0.0f)
+				: Vector3f(1.0f, 0.0f, 0.0f);
+		}
+
+		const Vector3f diagonal = maxBounds - minBounds;
+		const float maxExtent = std::max(1.0f, std::max(std::fabs(diagonal.x()), std::max(std::fabs(diagonal.y()), std::fabs(diagonal.z()))));
+		const float focusDistance = std::max(1.0f, (target - eye).norm());
+		const float farPlane = std::max(1000.0f, std::max(maxExtent * 20.0f, focusDistance * 4.0f));
+
 		InputCamera focusCamera = viewIt->second.cam;
-		focusCamera.setLookAt(eye, center, Vector3f(0.0f, 1.0f, 0.0f));
+		focusCamera.setLookAt(eye, eye + *forward, cameraUp);
+		if (hasFovy && fovy > 0.0f && fovy < kPi) {
+			focusCamera.fovy(fovy);
+		}
 		focusCamera.znear(0.01f);
-		focusCamera.zfar(std::max(1000.0f, maxExtent * 20.0f));
+		focusCamera.zfar(farPlane);
 		handler->fromCamera(focusCamera, false, true);
 		viewIt->second.cam = focusCamera;
 	}

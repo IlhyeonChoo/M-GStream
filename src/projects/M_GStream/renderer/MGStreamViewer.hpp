@@ -91,7 +91,17 @@ namespace sibr {
 		static const char* contentLoadStateLabel(ContentLoadState state);
 		size_t createManifestInstances(bool onlyMissing = true);
 		void focusCameraOnManifest();
+		void focusCameraOnModel(const GaussianField& field);
+		void focusCameraOnPoint(const Vector3f& focusPoint, const Vector3f& minBounds, const Vector3f& maxBounds);
 		void focusCameraOnBounds(const Vector3f& minBounds, const Vector3f& maxBounds);
+		void applyFocusCameraPose(
+			const Vector3f& eye,
+			const Vector3f& target,
+			const Vector3f& up,
+			const Vector3f& minBounds,
+			const Vector3f& maxBounds,
+			bool hasFovy = false,
+			float fovy = 0.0f);
 		static const char* cpuStateLabel(CpuState state);
 		static const char* gpuStateLabel(GpuState state);
 		static std::string formatMegabytes(size_t bytes);

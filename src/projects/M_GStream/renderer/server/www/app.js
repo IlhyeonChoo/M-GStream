@@ -38,8 +38,8 @@ const state = {
 const MIN_VECTOR_NORM = 1e-6;
 const PARALLEL_THRESHOLD = 0.999;
 const DEFAULT_FOVY = Math.PI / 4.0;
-const DEFAULT_MOVE_SPEED = 0.6;
-const DEFAULT_ROTATE_SPEED = 30.0;
+const DEFAULT_MOVE_SPEED = 3.0;
+const DEFAULT_ROTATE_SPEED = 50.0;
 const DEFAULT_MOUSE_SENSITIVITY = 0.15;
 const DEFAULT_SEND_INTERVAL_MS = 33;
 const HEALTH_POLL_INTERVAL_MS = 1000;
@@ -1551,10 +1551,10 @@ class CameraController {
       applyPitch(rotateAmount);
     }
     if (this.keysPressed.KeyU) {
-      applyRoll(-rotateAmount);
+      applyRoll(rotateAmount);
     }
     if (this.keysPressed.KeyO) {
-      applyRoll(rotateAmount);
+      applyRoll(-rotateAmount);
     }
 
     if (moved) {

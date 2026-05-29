@@ -172,6 +172,7 @@ namespace sibr {
 		view_mat.row(0) *= -1;
 		view_mat.row(1) *= -1;
 		view_mat.row(2) *= -1;
+		proj_mat.row(0) *= -1;
 		proj_mat.row(1) *= -1;
 
 		// Compute additional view parameters

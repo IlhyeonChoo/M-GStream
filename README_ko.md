@@ -10,6 +10,7 @@ M_GStream은 pinned SIBR fork 위에 만든 C++/CUDA 기반 Gaussian Splatting
 ## 데모
 
 [원격 브라우저 뷰어 데모 보기](docs/demo.mp4)
+https://github.com/user-attachments/assets/eef6f69f-a3d4-4069-9907-861f35ba1793
 
 데모 영상은 H.264 MP4, 1280x720, 30 FPS, 약 102초 길이입니다. 영상은 headless
 원격 브라우저 뷰어의 기본 흐름을 보여줍니다: 서버 실행, 브라우저 접속, 모델 로드,

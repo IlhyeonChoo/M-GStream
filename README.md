@@ -1,5 +1,7 @@
 # M_GStream
 
+Languages: [English](README.md) | [한국어](README_ko.md)
+
 M_GStream is a C++/CUDA Gaussian Splatting viewer/editor built on top of a pinned
 SIBR fork. It does not train models. Instead, it loads pre-trained Gaussian Splatting
 outputs from disk, keeps them as CPU assets, creates scene instances, uploads shared GPU
@@ -10,9 +12,8 @@ copies on demand, and renders composed scenes through an external CUDA rasterize
 [Watch the remote browser viewer demo](docs/demo.mp4)
 
 The demo video is H.264 MP4, 1280x720, 30 FPS, and about 102 seconds long. It shows
-starting the headless server over SSH from the project directory, opening the browser viewer,
-loading Model A, briefly moving the camera, replacing it with Model B, unloading, loading Model B
-again, replacing it with Model C, unloading, and loading Model B again.
+the headless remote browser viewer workflow: starting the server, opening the browser,
+loading models, moving the camera, replacing the current model, and unloading content.
 
 ## Quick Start
 

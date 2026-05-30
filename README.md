@@ -11,6 +11,10 @@ copies on demand, and renders composed scenes through an external CUDA rasterize
 
 [Watch the remote browser viewer demo](docs/demo.mp4)
 
+
+https://github.com/user-attachments/assets/eef6f69f-a3d4-4069-9907-861f35ba1793
+
+
 The demo video is H.264 MP4, 1280x720, 30 FPS, and about 102 seconds long. It shows
 the headless remote browser viewer workflow: starting the server, opening the browser,
 loading models, moving the camera, replacing the current model, and unloading content.
